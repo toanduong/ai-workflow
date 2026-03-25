@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/WorkflowAI.Application/WorkflowAI.Application.csproj" />
+    <Project Path="src/WorkflowAI.Domain/WorkflowAI.Domain.csproj" />
+    <Project Path="src/WorkflowAI.Functions/WorkflowAI.Functions.csproj" />
+    <Project Path="src/WorkflowAI.Infrastructure/WorkflowAI.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/WorkflowAI.Application.UnitTests/WorkflowAI.Application.UnitTests.csproj" />
+    <Project Path="tests/WorkflowAI.Architecture.Tests/WorkflowAI.Architecture.Tests.csproj" />
+    <Project Path="tests/WorkflowAI.Domain.UnitTests/WorkflowAI.Domain.UnitTests.csproj" />
+    <Project Path="tests/WorkflowAI.Functions.IntegrationTests/WorkflowAI.Functions.IntegrationTests.csproj" />
+    <Project Path="tests/WorkflowAI.Infrastructure.IntegrationTests/WorkflowAI.Infrastructure.IntegrationTests.csproj" />
+  </Folder>
+</Solution>
