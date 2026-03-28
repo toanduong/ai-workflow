@@ -13,7 +13,6 @@ public sealed class CosmosDbContext
         _databaseName = databaseName;
     }
 
-    public Container Workflows => _client.GetContainer(_databaseName, CosmosContainerNames.Workflows);
     public Container Executions => _client.GetContainer(_databaseName, CosmosContainerNames.Executions);
     public Container Approvals => _client.GetContainer(_databaseName, CosmosContainerNames.Approvals);
     public Container Notifications => _client.GetContainer(_databaseName, CosmosContainerNames.Notifications);
@@ -23,7 +22,6 @@ public sealed class CosmosDbContext
     {
         var database = await _client.CreateDatabaseIfNotExistsAsync(_databaseName);
 
-        await database.Database.CreateContainerIfNotExistsAsync(CosmosContainerNames.Workflows, "/id");
         await database.Database.CreateContainerIfNotExistsAsync(CosmosContainerNames.Executions, "/workflowId");
         await database.Database.CreateContainerIfNotExistsAsync(CosmosContainerNames.Approvals, "/stepExecutionId");
         await database.Database.CreateContainerIfNotExistsAsync(CosmosContainerNames.Notifications, "/approvalRequestId");

@@ -23,6 +23,6 @@ public sealed class NotificationChannelConfiguration : IEntityTypeConfiguration<
             .HasMaxLength(50)
             .IsRequired();
 
-        builder.Property(c => c.ConnectionConfig).HasColumnType("nvarchar(max)");
+        builder.Property(c => c.ConnectionConfig).HasColumnType("text");
     }
 }

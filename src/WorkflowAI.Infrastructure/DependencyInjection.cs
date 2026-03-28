@@ -55,15 +55,14 @@ public static class DependencyInjection
         var databaseName = configuration.GetValue<string>("CosmosDb:DatabaseName") ?? "workflow-ai";
         services.AddSingleton(sp => new CosmosDbContext(sp.GetRequiredService<CosmosClient>(), databaseName));
 
-        services.AddScoped<IWorkflowRepository, CosmosWorkflowRepository>();
         services.AddScoped<IExecutionRepository, CosmosExecutionRepository>();
         services.AddScoped<IApprovalRepository, CosmosApprovalRepository>();
         services.AddScoped<INotificationRepository, CosmosNotificationRepository>();
         services.AddScoped<IAIAgentTaskRepository, CosmosAIAgentTaskRepository>();
 
-        // EF Core (Azure SQL)
+        // EF Core (PostgreSQL)
         services.AddDbContext<WorkflowAIDbContext>(options =>
-            options.UseSqlServer(configuration.GetConnectionString("SqlDb")));
+            options.UseNpgsql(configuration.GetConnectionString("PostgreSql")));
 
         services.AddScoped<IUserRepository, SqlUserRepository>();
         services.AddScoped<ITemplateRepository, SqlTemplateRepository>();
@@ -93,6 +92,7 @@ public static class DependencyInjection
         services.AddSingleton(sp =>
             new BlobServiceClient(configuration.GetConnectionString("BlobStorage")));
         services.AddScoped<IBlobStorageService, BlobStorageService>();
+        services.AddScoped<IWorkflowRepository, BlobWorkflowRepository>();
 
         // Identity & Token
         services.AddScoped<ICurrentUserService, CurrentUserService>();

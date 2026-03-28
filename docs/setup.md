@@ -33,7 +33,7 @@ az role assignment create \
   --scope /subscriptions/<sub-id>/resourceGroups/workflow-ai-rg/providers/Microsoft.KeyVault/vaults/workflow-ai-kv
 ```
 
-### 1.2 Azure SQL Database (stores connector metadata)
+### 1.2 PostgreSQL Database (stores connector metadata)
 
 The `Connectors` and `ConnectorCredentials` tables live alongside other app tables. Apply the EF Core migration:
 
@@ -118,7 +118,7 @@ Add these to `local.settings.json` (local) or Azure Function App Settings (produ
     "Teams__WebhookSecret": "<teams-webhook-secret>"
   },
   "ConnectionStrings": {
-    "SqlDb": "Server=...;Database=workflow-ai-db;...",
+    "PostgreSql": "Host=...;Database=workflow-ai-db;...",
     "AzureCommunicationServices": "endpoint=https://...;accesskey=..."
   }
 }
@@ -129,7 +129,7 @@ Add these to `local.settings.json` (local) or Azure Function App Settings (produ
 | Key | Required For | Description |
 |---|---|---|
 | `KeyVault:Uri` | All connectors | Key Vault URI — all secrets stored here |
-| `ConnectionStrings:SqlDb` | All connectors | SQL DB for connector metadata |
+| `ConnectionStrings:PostgreSql` | All connectors | PostgreSQL DB for connector metadata |
 | `OAuth:ClientId` | OAuth2 connectors | Entra ID app registration client ID |
 | `OAuth:ClientSecret` | OAuth2 connectors | Entra ID app registration client secret |
 | `OAuth:RedirectUri` | OAuth2 connectors | OAuth callback URL (must match Entra app registration) |
@@ -193,7 +193,7 @@ Content-Type: application/json
 ```
 
 **What happens:**
-1. Connector record created in SQL (status: `Created`)
+1. Connector record created in PostgreSQL (status: `Created`)
 2. Secret stored in Key Vault as `connector-{id}-secret`
 3. ConnectorCredential record created (points to Key Vault secret name)
 4. Connector status set to `Active`
@@ -545,7 +545,7 @@ az deployment group create \
                                        ▼
 ┌──────────────────┐    ┌────────────────────┐    ┌──────────────────────┐
 │    Workflow       │───▶│   WorkflowStep     │───▶│     Connector        │
-│  (Cosmos DB)      │    │  - Approval        │    │  - Office365         │
+│  (Blob Storage)   │    │  - Approval        │    │  - Office365         │
 │                   │    │  - Send Email      │    │  - OAuth2            │
 │                   │    │    ConnectorId: FK──│───▶│  - Status: Active    │
 │                   │    │                    │    │  - ApiConnectionId   │

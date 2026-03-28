@@ -72,12 +72,12 @@ flowchart LR
 |---|---|---|
 | 1 | **Event-Driven** | Decouple services via Azure Service Bus; each service reacts to domain events |
 | 2 | **API-First** | All capabilities exposed via RESTful APIs; frontend and integrations consume the same contracts |
-| 3 | **Cloud-Native** | Built for Azure; leverage managed services (Cosmos DB, Service Bus, AKS) to minimize ops overhead |
+| 3 | **Cloud-Native** | Built for Azure with PostgreSQL; leverage managed services (Cosmos DB, Service Bus, AKS) to minimize ops overhead |
 | 4 | **Separation of Concerns** | Each service owns a single domain (workflow, approval, notification, AI) |
 | 5 | **Security by Default** | Entra ID authentication, Key Vault for secrets, signed approval tokens, webhook verification |
 | 6 | **Observability** | Distributed tracing, structured logging, and health checks across all services |
 | 7 | **Idempotency** | All event handlers and API mutations are idempotent to handle retries safely |
-| 8 | **Polyglot Persistence** | Use the right store for each workload: Cosmos DB for documents, SQL for relational data |
+| 8 | **Polyglot Persistence** | Use the right store for each workload: Cosmos DB for documents, Blob Storage for workflows, PostgreSQL for relational data |
 
 ---
 
@@ -104,7 +104,7 @@ flowchart TB
 
     subgraph Data["Data Stores"]
         COSMOS[(Cosmos DB)]
-        SQL[(Azure SQL)]
+        SQL[(PostgreSQL)]
         BLOB[(Blob Storage)]
     end
 
@@ -158,7 +158,7 @@ block-beta
 
     block:infra:5
         COSMOS[("Cosmos DB")]
-        SQLDB[("Azure SQL")]
+        SQLDB[("PostgreSQL")]
         BUS[("Service Bus")]
         BLOB[("Blob Storage")]
         KV[("Key Vault")]
@@ -173,11 +173,11 @@ block-beta
 
 | Service | Type | Responsibility | Owns Data |
 |---|---|---|---|
-| **Workflow API** | Web API | CRUD, execution control, template management | Workflows, Executions (Cosmos); Templates, Users (SQL) |
+| **Workflow API** | Web API | CRUD, execution control, template management | Workflows (Blob Storage); Executions (Cosmos); Templates, Users (PostgreSQL) |
 | **AI Agent Service** | Worker Service | LLM orchestration, prompt management, tool calling | AIAgentTasks (Cosmos) |
 | **Approval Engine** | Worker Service | Approval lifecycle, timeout, escalation | ApprovalRequests, ApprovalActions (Cosmos) |
 | **Notification Service** | Worker Service | Multi-channel dispatch, delivery tracking | Notifications (Cosmos) |
-| **Connector Manager** | Service | Connector lifecycle: OAuth flows, credential storage, API Connection provisioning | Connectors, ConnectorCredentials (SQL); Secrets (Key Vault) |
+| **Connector Manager** | Service | Connector lifecycle: OAuth flows, credential storage, API Connection provisioning | Connectors, ConnectorCredentials (PostgreSQL); Secrets (Key Vault) |
 | **Logic App Generator** | Service | ARM/Bicep generation with API Connection resolution | Generated templates (Blob) |
 
 ---
@@ -263,7 +263,7 @@ flowchart TB
     SG --> CS
     EP --> BUS[(Service Bus)]
     CR --> COSMOS[(Cosmos DB)]
-    SR --> SQL[(Azure SQL)]
+    SR --> SQL[(PostgreSQL)]
     KVC --> KV[(Key Vault)]
     ARMC --> ARM[Azure RM]
 ```
@@ -646,14 +646,13 @@ flowchart LR
 flowchart TB
     subgraph CosmosDB["Cosmos DB (Document Store)"]
         direction TB
-        WF[Workflows Collection]
         EX[Executions Collection]
         AP[Approvals Collection]
         NT[Notifications Collection]
         AT[AITasks Collection]
     end
 
-    subgraph SQL["Azure SQL (Relational)"]
+    subgraph SQL["PostgreSQL (Relational)"]
         direction TB
         USR[Users Table]
         TPL[Templates Table]
@@ -664,6 +663,7 @@ flowchart TB
 
     subgraph Blob["Blob Storage"]
         direction TB
+        WF[Workflows]
         LA[Logic App Templates]
         ATT[Attachments]
     end
@@ -681,7 +681,6 @@ flowchart TB
 
 | Collection | Partition Key | Rationale |
 |---|---|---|
-| `workflows` | `/id` | Each workflow is self-contained; queried by ID |
 | `executions` | `/workflowId` | All executions for a workflow are co-located |
 | `approvals` | `/workflowExecutionId` | Approvals queried alongside their execution |
 | `notifications` | `/approvalRequestId` | Notifications grouped by approval request |
@@ -843,19 +842,19 @@ Each notification channel is now backed by a **Connector** that manages its auth
 
 ```mermaid
 flowchart TB
-    subgraph Channels["Notification Channels (Azure SQL)"]
+    subgraph Channels["Notification Channels (PostgreSQL)"]
         SL["Slack Channel<br/>- Name: #approvals<br/>- ConnectorId: FK"]
         TM["Teams Channel<br/>- Name: General<br/>- ConnectorId: FK"]
         EM["Email Channel<br/>- SenderAddress<br/>- ConnectorId: FK"]
     end
 
-    subgraph Connectors["Connectors (Azure SQL)"]
+    subgraph Connectors["Connectors (PostgreSQL)"]
         SC["Slack Connector<br/>- Type: Slack<br/>- Auth: APIKey<br/>- Status: Active"]
         TC["Teams Connector<br/>- Type: Teams<br/>- Auth: OAuth2<br/>- Status: Active<br/>- ApiConnectionId: /sub/.../connections/teams"]
         EC["Email Connector<br/>- Type: ACS<br/>- Auth: ConnectionString<br/>- Status: Active"]
     end
 
-    subgraph Credentials["Connector Credentials (Azure SQL → Key Vault)"]
+    subgraph Credentials["Connector Credentials (PostgreSQL → Key Vault)"]
         SCR["KeyVaultSecretName:<br/>connector-slack-bot-token"]
         TCR["KeyVaultSecretName:<br/>connector-teams-refresh-token"]
         ECR["KeyVaultSecretName:<br/>connector-acs-connection-string"]
@@ -1182,7 +1181,7 @@ flowchart LR
 | **Webhook Verification** | Slack signing secret (HMAC-SHA256), Teams HMAC validation |
 | **Approval Token Security** | Single-use, time-limited, HMAC-signed tokens |
 | **Data Encryption** | TLS 1.3 in transit, Azure-managed encryption at rest |
-| **Network Security** | Private endpoints for Cosmos DB, SQL, Service Bus |
+| **Network Security** | Private endpoints for Cosmos DB, PostgreSQL, Service Bus |
 | **Audit Trail** | Every approval action logged with user, channel, timestamp |
 
 ---
@@ -1200,8 +1199,8 @@ flowchart TB
         end
 
         subgraph Data["Data"]
-            COSMOS["Cosmos DB Account<br/>- Serverless tier<br/>- 5 containers"]
-            SQL["Azure SQL Server<br/>- Serverless tier<br/>- Single database"]
+            COSMOS["Cosmos DB Account<br/>- Serverless tier<br/>- 4 containers"]
+            SQL["PostgreSQL Server<br/>- Serverless tier<br/>- Single database"]
             BUS["Service Bus Namespace<br/>- Premium tier<br/>- 4 topics"]
             BLOB["Storage Account<br/>- Blob containers"]
         end
@@ -1342,26 +1341,27 @@ All event handlers check for duplicate processing:
 |---|---|---|
 | App settings | Azure App Configuration | Feature flags, service URLs |
 | Secrets | Azure Key Vault | API keys, connection strings |
-| Per-tenant config | Azure SQL | Notification channels, templates |
-| Runtime config | Cosmos DB | Workflow definitions, step configs |
+| Per-tenant config | PostgreSQL | Notification channels, templates |
+| Runtime config | Blob Storage / Cosmos DB | Workflow definitions in Blob Storage, execution step configs in Cosmos DB |
 
 ---
 
 ## 17. Architecture Decision Records (ADRs)
 
-### ADR-001: Cosmos DB for Workflow Data
+### ADR-001: Cosmos DB and Blob Storage for Workflow Data
 
-**Context:** Workflow definitions and executions have flexible, evolving schemas with nested step configurations.
+**Context:** Workflow definitions and executions have flexible, evolving schemas with nested step configurations. Workflow definitions are large JSON documents that benefit from Blob Storage, while executions, approvals, notifications, and AI tasks require document-query capabilities.
 
-**Decision:** Use Azure Cosmos DB (NoSQL) for workflow-related data.
+**Decision:** Use Azure Blob Storage for workflow definitions and Azure Cosmos DB (NoSQL) for executions, approvals, notifications, and AI tasks.
 
 **Rationale:**
-- Flexible schema supports varying step configurations without migrations
-- Hierarchical data (workflow → steps → executions) maps naturally to documents
-- Partition by workflowId enables efficient queries
+- Workflow definitions are self-contained JSON documents well-suited to Blob Storage, reducing Cosmos DB cost and RU consumption
+- Executions, approvals, notifications, and AI tasks benefit from Cosmos DB's flexible schema and querying capabilities
+- Hierarchical data (executions → step executions) maps naturally to documents in Cosmos DB
+- Partition by workflowId/executionId enables efficient queries for runtime data
 - Serverless tier reduces cost for variable workloads
 
-**Alternatives considered:** Azure SQL (rejected: rigid schema for varying step configs), Table Storage (rejected: limited querying)
+**Alternatives considered:** Azure SQL (rejected: rigid schema for varying step configs), Table Storage (rejected: limited querying), Cosmos DB for all data (rejected: unnecessary cost for workflow definitions that are read/written as whole documents)
 
 ---
 
@@ -1433,14 +1433,14 @@ All event handlers check for duplicate processing:
 **Context:** Logic Apps require `Microsoft.Web/connections` (API Connection) resources with valid credentials to interact with external services (Office 365, Slack, Teams, etc.). Notification channels also need authenticated access. Storing credentials directly in SQL or configuration is a security risk.
 
 **Decision:** Introduce a Connector Management subsystem with:
-- `Connector` and `ConnectorCredential` entities in Azure SQL (metadata only)
+- `Connector` and `ConnectorCredential` entities in PostgreSQL (metadata only)
 - All secrets stored exclusively in Azure Key Vault
 - Azure API Connection resources provisioned via ARM for Logic App integration
 - OAuth 2.0 flows handled server-side with PKCE
 - Proactive token refresh via timer triggers
 
 **Rationale:**
-- **Security**: Secrets never leave Key Vault; SQL stores only Key Vault references
+- **Security**: Secrets never leave Key Vault; PostgreSQL stores only Key Vault references
 - **Logic App compatibility**: Generated ARM templates include `Microsoft.Web/connections` resources that reference provisioned API Connections
 - **Unified model**: Both notification channels and Logic App steps use the same Connector entity for authentication
 - **Credential lifecycle**: Token refresh, rotation, and expiry are handled centrally

@@ -4,14 +4,14 @@
 
 ### 1.1 Project Setup & Infrastructure
 - [ ] Create .NET 10 solution with project structure (API, Services, Domain, Infrastructure)
-- [ ] Configure Azure resource group with Bicep/Terraform (Cosmos DB, SQL, Service Bus, Key Vault, AKS)
+- [ ] Configure Azure resource group with Bicep/Terraform (Cosmos DB, PostgreSQL, Blob Storage, Service Bus, Key Vault, AKS)
 - [ ] Set up CI/CD pipeline (GitHub Actions or Azure DevOps)
 - [ ] Configure Entra ID app registration for OAuth 2.0 / OIDC
 - [ ] Set up API Management / YARP gateway
 
 ### 1.2 Data Layer
-- [ ] Implement Cosmos DB repository (generic + workflow-specific)
-- [ ] Implement EF Core context for Azure SQL (Users, Templates, Channels)
+- [ ] Implement Cosmos DB repository for Executions, Approvals, Notifications, AI Tasks (4 containers)
+- [ ] Implement EF Core context for PostgreSQL (Users, Templates, Channels)
 - [ ] Create database migrations and seed data
 - [ ] Implement Unit of Work pattern for transactional consistency
 

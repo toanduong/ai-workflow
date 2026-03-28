@@ -34,6 +34,6 @@ public sealed class ConnectorConfiguration : IEntityTypeConfiguration<Connector>
 
         builder.Property(c => c.AzureApiConnectionId).HasMaxLength(500);
         builder.Property(c => c.ManagedApiId).HasMaxLength(500);
-        builder.Property(c => c.Configuration).HasColumnType("nvarchar(max)");
+        builder.Property(c => c.Configuration).HasColumnType("text");
     }
 }

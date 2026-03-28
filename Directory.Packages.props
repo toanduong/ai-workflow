@@ -22,7 +22,7 @@
     <PackageVersion Include="Azure.Security.KeyVault.Secrets" Version="4.7.0" />
 
     <!-- EF Core -->
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.5" />
+    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.1" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.5" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Tools" Version="10.0.5" />
 

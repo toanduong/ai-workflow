@@ -14,7 +14,7 @@
 - **Clean Architecture + DDD + CQRS + Event-Driven**
 - **Presentation:** Azure Functions (isolated worker, .NET 10, `AzureFunctionsVersion=v4`)
 - **CQRS:** MediatR 12.x with pipeline behaviors
-- **Data:** Cosmos DB (workflows, executions, approvals) + Azure SQL via EF Core 10 (users, templates, channels)
+- **Data:** Azure Blob Storage (workflows) + Cosmos DB (executions, approvals) + PostgreSQL via EF Core 10 (users, templates, channels)
 - **Messaging:** Azure Service Bus (domain events → integration events)
 - **AI:** Azure OpenAI (`Azure.AI.OpenAI 2.3.0-beta.1`)
 - **Notifications:** Email (Azure Communication Services), Slack (Web API), Teams (Adaptive Cards)
@@ -62,15 +62,15 @@ WorkflowAI.slnx                          (.NET 10 slnx format)
 
 | Aggregate/Entity | Folder | ID Type | Storage |
 |---|---|---|---|
-| `Workflow` + `WorkflowStep` | `Workflows/` | `WorkflowId` | Cosmos |
+| `Workflow` + `WorkflowStep` | `Workflows/` | `WorkflowId` | Blob Storage |
 | `WorkflowExecution` + `StepExecution` | `Executions/` | `ExecutionId` | Cosmos |
 | `ApprovalRequest` + `ApprovalAction` | `Approvals/` | `ApprovalRequestId` | Cosmos |
 | `AIAgentTask` | `AIAgent/` | `AIAgentTaskId` | Cosmos |
 | `Notification` | `Notifications/` | `NotificationId` | Cosmos |
-| `User` | `Users/` | `UserId` | Azure SQL |
-| `WorkflowTemplate` | `Templates/` | `TemplateId` | Azure SQL |
-| `NotificationChannel` | `Channels/` | `ChannelId` | Azure SQL |
-| `Connector` + `ConnectorCredential` | `Connectors/` | `ConnectorId` | Azure SQL |
+| `User` | `Users/` | `UserId` | PostgreSQL |
+| `WorkflowTemplate` | `Templates/` | `TemplateId` | PostgreSQL |
+| `NotificationChannel` | `Channels/` | `ChannelId` | PostgreSQL |
+| `Connector` + `ConnectorCredential` | `Connectors/` | `ConnectorId` | PostgreSQL |
 
 ### Domain Events (7)
 `WorkflowCreated`, `WorkflowStarted`, `WorkflowCompleted`, `ExecutionStarted`, `StepCompleted`, `ExecutionCompleted`, `ApprovalRequested`, `ApprovalCompleted`, `ApprovalEscalated`
@@ -109,7 +109,8 @@ WorkflowAI.slnx                          (.NET 10 slnx format)
 
 | Component | Implementation | Notes |
 |---|---|---|
-| Cosmos repos (5) | `CosmosWorkflowRepository`, etc. | Partition keys: `/id`, `/workflowId`, `/stepExecutionId` |
+| Cosmos repos (4) | `CosmosExecutionRepository`, etc. | Partition keys: `/id`, `/workflowId`, `/stepExecutionId` |
+| Blob repo | `BlobWorkflowRepository` | Workflow + WorkflowStep stored in Azure Blob Storage |
 | EF Core | `WorkflowAIDbContext` + 5 configs | Users, Templates, Channels, Connectors, ConnectorCredentials tables |
 | Service Bus | `ServiceBusPublisher` | Topics: workflow-events, step-events, approval-events, notification-events |
 | Domain Events | `DomainEventDispatcher` | MediatR in-process publish → clear events |
@@ -172,7 +173,7 @@ WorkflowAI.slnx                          (.NET 10 slnx format)
 | MediatR `RequestHandlerDelegate` | Does NOT accept `CancellationToken` arg — call `next()` not `next(ct)` |
 | Azure Functions SDK + net10.0 | Works with SDK `2.0.7` + `AzureFunctionsVersion=v4` |
 | Mapster version | Must use `10.0.0` (not 7.x) — `DependencyInjection` pkg requires it |
-| Azure.Identity | Must use `1.14.2+` (EF Core SqlServer transitively requires it) |
+| Azure.Identity | Must use `1.14.2+` (EF Core PostgreSQL transitively requires it) |
 | `Result` base class | Needs `implicit operator Result(Error)` for `return Error.xxx(...)` to compile |
 
 ---

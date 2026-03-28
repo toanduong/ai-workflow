@@ -2,7 +2,7 @@
 
 ## C4 Architecture Documentation
 
-> **Tech Stack:** .NET 10, Azure Services (Logic Apps, Service Bus, Functions, Cosmos DB, Communication Services)
+> **Tech Stack:** .NET 10, Azure Services (Logic Apps, Service Bus, Functions, Cosmos DB, PostgreSQL, Communication Services)
 > **Pattern:** AI Agent with Human-in-the-Loop Approval
 
 ---
@@ -75,8 +75,8 @@ C4Container
         Container(notificationService, "Notification Service", ".NET 10 Worker", "Multi-channel notification dispatch (Slack, Teams, Email)")
         Container(logicAppGenerator, "Logic App Generator", ".NET 10 Service", "Generates & deploys Azure Logic App ARM/Bicep scripts with API Connections")
         Container(connectorManager, "Connector Manager", ".NET 10 Service", "Manages connector lifecycle: OAuth flows, API key storage, API Connection provisioning")
-        ContainerDb(cosmosDB, "Cosmos DB", "Azure Cosmos DB (NoSQL)", "Workflows, tasks, approvals, audit logs")
-        ContainerDb(sqlDB, "Azure SQL", "Azure SQL Database", "User profiles, templates, channel configs, connectors")
+        ContainerDb(cosmosDB, "Cosmos DB", "Azure Cosmos DB (NoSQL)", "Tasks, approvals, audit logs")
+        ContainerDb(sqlDB, "PostgreSQL", "Azure Database for PostgreSQL", "User profiles, templates, channel configs, connectors")
         Container(serviceBus, "Service Bus", "Azure Service Bus", "Async messaging between services (events, commands)")
         Container(blobStorage, "Blob Storage", "Azure Blob Storage", "Generated Logic App scripts, attachments, exports")
         Container(keyVault, "Key Vault", "Azure Key Vault", "Connector credentials, API keys, secrets, tokens")
@@ -126,8 +126,8 @@ C4Container
 | **Notification Service** | .NET 10 Worker Service | Multi-channel notification dispatch |
 | **Logic App Generator** | .NET 10 Service | Generates ARM/Bicep templates for Azure Logic Apps with API Connections |
 | **Connector Manager** | .NET 10 Service | Manages connector lifecycle: OAuth flows, credentials, API Connection provisioning |
-| **Cosmos DB** | Azure Cosmos DB | Workflow instances, tasks, approvals, audit trail |
-| **Azure SQL** | Azure SQL Database | User profiles, templates, channel configurations, connectors |
+| **Cosmos DB** | Azure Cosmos DB | Tasks, approvals, audit trail |
+| **PostgreSQL** | Azure Database for PostgreSQL | User profiles, templates, channel configurations, connectors |
 | **Key Vault** | Azure Key Vault | Connector credentials, API keys, signing secrets |
 | **Service Bus** | Azure Service Bus | Event-driven async communication |
 | **Blob Storage** | Azure Blob Storage | Generated scripts, attachments |
@@ -152,13 +152,13 @@ C4Component
         Component(connectorService, "ConnectorService", "Domain Service", "Connector lifecycle: OAuth exchange, credential storage, API Connection provisioning")
         Component(eventPublisher, "EventPublisher", "Infrastructure", "Publishes domain events to Service Bus")
         Component(cosmosRepo, "CosmosRepository", "Infrastructure", "Data access for Cosmos DB")
-        Component(sqlRepo, "SqlRepository", "Infrastructure", "Data access for Azure SQL via EF Core")
+        Component(sqlRepo, "SqlRepository", "Infrastructure", "Data access for PostgreSQL via EF Core")
         Component(keyVaultClient, "KeyVaultClient", "Infrastructure", "Reads/Writes secrets to Azure Key Vault")
         Component(armClient, "ArmClient", "Infrastructure", "Provisions Azure API Connection resources via ARM")
     }
 
-    ContainerDb(cosmosDB, "Cosmos DB", "Workflows, Tasks, Approvals")
-    ContainerDb(sqlDB, "Azure SQL", "Users, Templates, Configs, Connectors")
+    ContainerDb(cosmosDB, "Cosmos DB", "Tasks, Approvals")
+    ContainerDb(sqlDB, "PostgreSQL", "Users, Templates, Configs, Connectors")
     Container(serviceBus, "Service Bus", "Event messaging")
     Container(keyVault, "Key Vault", "Secrets")
     System_Ext(azureOpenAI, "Azure OpenAI", "LLM")
@@ -207,7 +207,7 @@ C4Component
 
     Container(serviceBus, "Service Bus", "Event source")
     Container(keyVault, "Key Vault", "Channel credentials")
-    ContainerDb(sqlDB, "Azure SQL", "Connector configs")
+    ContainerDb(sqlDB, "PostgreSQL", "Connector configs")
     System_Ext(slackAPI, "Slack API", "Slack workspace")
     System_Ext(teamsAPI, "MS Teams / Graph API", "Teams channels")
     System_Ext(emailACS, "Azure Communication Services", "Email delivery")
@@ -410,19 +410,19 @@ erDiagram
 
 | Entity | Purpose | Storage |
 |---|---|---|
-| **Workflow** | Definition of a workflow with its steps | Cosmos DB |
-| **WorkflowTemplate** | Reusable workflow blueprints | Azure SQL |
-| **WorkflowStep** | Individual step definition (AI, Approval, Notification) | Cosmos DB |
+| **Workflow** | Definition of a workflow with its steps | Blob Storage |
+| **WorkflowTemplate** | Reusable workflow blueprints | PostgreSQL |
+| **WorkflowStep** | Individual step definition (AI, Approval, Notification) | Blob Storage |
 | **WorkflowExecution** | Runtime instance of a workflow | Cosmos DB |
 | **StepExecution** | Runtime state of each step | Cosmos DB |
 | **ApprovalRequest** | Human-in-the-loop approval with token-based access | Cosmos DB |
 | **ApprovalAction** | Audit trail of approval decisions | Cosmos DB |
 | **AIAgentTask** | AI/LLM execution record with token tracking | Cosmos DB |
 | **Notification** | Notification delivery record with retry tracking | Cosmos DB |
-| **NotificationChannel** | Channel configuration linked to Connector for auth | Azure SQL |
-| **Connector** | Connector definition (type, auth model, Azure API Connection reference) | Azure SQL |
-| **ConnectorCredential** | Key Vault secret pointer (never stores raw secrets) | Azure SQL |
-| **User** | User profile linked to Entra ID | Azure SQL |
+| **NotificationChannel** | Channel configuration linked to Connector for auth | PostgreSQL |
+| **Connector** | Connector definition (type, auth model, Azure API Connection reference) | PostgreSQL |
+| **ConnectorCredential** | Key Vault secret pointer (never stores raw secrets) | PostgreSQL |
+| **User** | User profile linked to Entra ID | PostgreSQL |
 
 ---
 
@@ -658,7 +658,7 @@ C4Deployment
             }
             Deployment_Node(data, "Data Services", "") {
                 ContainerDb(cosmosDeploy, "Cosmos DB", "Serverless/Provisioned")
-                ContainerDb(sqlDeploy, "Azure SQL", "Serverless")
+                ContainerDb(sqlDeploy, "PostgreSQL", "Azure Database for PostgreSQL")
                 Container(busDeploy, "Service Bus", "Premium tier")
                 Container(blobDeploy, "Blob Storage", "Hot tier")
             }

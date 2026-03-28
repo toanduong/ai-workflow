@@ -27,6 +27,6 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
             .HasMaxLength(50)
             .IsRequired();
 
-        builder.Property(u => u.NotificationPreferences).HasColumnType("nvarchar(max)");
+        builder.Property(u => u.NotificationPreferences).HasColumnType("text");
     }
 }
