@@ -1,8 +1,13 @@
 using Microsoft.EntityFrameworkCore;
+using WorkflowAI.Domain.AIAgent;
+using WorkflowAI.Domain.Approvals;
 using WorkflowAI.Domain.Channels;
 using WorkflowAI.Domain.Connectors;
+using WorkflowAI.Domain.Executions;
+using WorkflowAI.Domain.Notifications;
 using WorkflowAI.Domain.Templates;
 using WorkflowAI.Domain.Users;
+using WorkflowAI.Domain.Workflows;
 
 namespace WorkflowAI.Infrastructure.Persistence.EntityFramework;
 
@@ -13,6 +18,12 @@ public sealed class WorkflowAIDbContext(DbContextOptions<WorkflowAIDbContext> op
     public DbSet<NotificationChannel> Channels => Set<NotificationChannel>();
     public DbSet<Connector> Connectors => Set<Connector>();
     public DbSet<ConnectorCredential> ConnectorCredentials => Set<ConnectorCredential>();
+    public DbSet<WorkflowExecution> Executions => Set<WorkflowExecution>();
+    public DbSet<StepExecution> StepExecutions => Set<StepExecution>();
+    public DbSet<ApprovalRequest> Approvals => Set<ApprovalRequest>();
+    public DbSet<ApprovalAction> ApprovalActions => Set<ApprovalAction>();
+    public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<AIAgentTask> AIAgentTasks => Set<AIAgentTask>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
