@@ -83,4 +83,32 @@ public sealed class Workflow : AggregateRoot<WorkflowId>
         LogicAppResourceId = resourceId;
         UpdatedAt = DateTime.UtcNow;
     }
+
+    public static Workflow Restore(
+        WorkflowId id,
+        string name,
+        string? description,
+        WorkflowStatus status,
+        UserId createdByUserId,
+        Guid? templateId,
+        string? logicAppResourceId,
+        DateTime createdAt,
+        DateTime? updatedAt,
+        IEnumerable<WorkflowStep> steps)
+    {
+        var workflow = new Workflow
+        {
+            Id = id,
+            Name = name,
+            Description = description,
+            Status = status,
+            CreatedByUserId = createdByUserId,
+            TemplateId = templateId,
+            LogicAppResourceId = logicAppResourceId,
+            CreatedAt = createdAt,
+            UpdatedAt = updatedAt
+        };
+        workflow._steps.AddRange(steps);
+        return workflow;
+    }
 }

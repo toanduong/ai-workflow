@@ -29,7 +29,7 @@ public sealed class NotificationChannelConfiguration : IEntityTypeConfiguration<
 
         builder.Property(c => c.ConnectorId)
             .HasConversion(new ValueConverter<ConnectorId?, Guid?>(
-                id => id.HasValue ? id.Value.Value : null,
+                id => id.HasValue ? (Guid?)id.Value.Value : null,
                 value => value.HasValue ? ConnectorId.From(value.Value) : null));
     }
 }

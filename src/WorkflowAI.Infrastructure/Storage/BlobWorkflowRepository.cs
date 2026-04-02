@@ -15,7 +15,7 @@ public sealed class BlobWorkflowRepository(BlobServiceClient blobServiceClient) 
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        Converters = { new WorkflowIdJsonConverter() }
+        Converters = { new JsonStringEnumConverter() }
     };
 
     public async Task<Workflow?> GetByIdAsync(WorkflowId id, CancellationToken cancellationToken = default)
@@ -27,7 +27,8 @@ public sealed class BlobWorkflowRepository(BlobServiceClient blobServiceClient) 
             return null;
 
         var response = await blobClient.DownloadContentAsync(cancellationToken);
-        return JsonSerializer.Deserialize<Workflow>(response.Value.Content.ToString(), SerializerOptions);
+        var data = JsonSerializer.Deserialize<WorkflowBlobData>(response.Value.Content.ToString(), SerializerOptions);
+        return data?.ToDomain();
     }
 
     public async Task<IReadOnlyList<Workflow>> GetAllAsync(CancellationToken cancellationToken = default)
@@ -39,9 +40,9 @@ public sealed class BlobWorkflowRepository(BlobServiceClient blobServiceClient) 
         {
             var blobClient = containerClient.GetBlobClient(blobItem.Name);
             var response = await blobClient.DownloadContentAsync(cancellationToken);
-            var workflow = JsonSerializer.Deserialize<Workflow>(response.Value.Content.ToString(), SerializerOptions);
-            if (workflow is not null)
-                workflows.Add(workflow);
+            var data = JsonSerializer.Deserialize<WorkflowBlobData>(response.Value.Content.ToString(), SerializerOptions);
+            if (data is not null)
+                workflows.Add(data.ToDomain());
         }
 
         return workflows.AsReadOnly();
@@ -52,7 +53,7 @@ public sealed class BlobWorkflowRepository(BlobServiceClient blobServiceClient) 
         var containerClient = await GetContainerAsync(cancellationToken);
         var blobClient = containerClient.GetBlobClient(ToBlobName(workflow.Id));
 
-        var json = JsonSerializer.Serialize(workflow, SerializerOptions);
+        var json = JsonSerializer.Serialize(WorkflowBlobData.FromDomain(workflow), SerializerOptions);
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
         await blobClient.UploadAsync(stream, overwrite: false, cancellationToken: cancellationToken);
     }
@@ -62,7 +63,7 @@ public sealed class BlobWorkflowRepository(BlobServiceClient blobServiceClient) 
         var containerClient = await GetContainerAsync(cancellationToken);
         var blobClient = containerClient.GetBlobClient(ToBlobName(workflow.Id));
 
-        var json = JsonSerializer.Serialize(workflow, SerializerOptions);
+        var json = JsonSerializer.Serialize(WorkflowBlobData.FromDomain(workflow), SerializerOptions);
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
         await blobClient.UploadAsync(stream, overwrite: true, cancellationToken: cancellationToken);
     }
@@ -82,13 +83,5 @@ public sealed class BlobWorkflowRepository(BlobServiceClient blobServiceClient) 
     }
 
     private static string ToBlobName(WorkflowId id) => $"{id.Value}.json";
-
-    private sealed class WorkflowIdJsonConverter : JsonConverter<WorkflowId>
-    {
-        public override WorkflowId Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-            => new(reader.GetGuid());
-
-        public override void Write(Utf8JsonWriter writer, WorkflowId value, JsonSerializerOptions options)
-            => writer.WriteStringValue(value.Value);
-    }
 }
+

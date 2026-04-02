@@ -6,4 +6,4 @@ namespace WorkflowAI.Application.Workflows.Commands.ActivateWorkflow;
 
 public sealed record ActivateWorkflowCommand(Guid WorkflowId) : IRequest<Result<ActivateWorkflowResult>>;
 
-public sealed record ActivateWorkflowResult(string ArmTemplateContent, string FileName);
+public sealed record ActivateWorkflowResult(string ArmTemplateContent, string FileName, string? LogicAppResourceId);
