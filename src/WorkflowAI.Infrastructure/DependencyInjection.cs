@@ -24,13 +24,10 @@ using WorkflowAI.Infrastructure.Messaging;
 using WorkflowAI.Infrastructure.Messaging.ServiceBus;
 using WorkflowAI.Infrastructure.Notifications;
 using WorkflowAI.Infrastructure.Notifications.Adapters;
-using WorkflowAI.Infrastructure.Persistence.Cosmos;
-using WorkflowAI.Infrastructure.Persistence.Cosmos.Repositories;
 using WorkflowAI.Infrastructure.Persistence.EntityFramework;
 using WorkflowAI.Infrastructure.Persistence.EntityFramework.Repositories;
 using WorkflowAI.Infrastructure.Services;
 using WorkflowAI.Infrastructure.Storage;
-using Microsoft.Azure.Cosmos;
 
 namespace WorkflowAI.Infrastructure;
 
@@ -39,26 +36,11 @@ public static class DependencyInjection
     public static IServiceCollection AddInfrastructure(
         this IServiceCollection services, IConfiguration configuration)
     {
-        // Cosmos DB
-        services.AddSingleton(sp =>
-        {
-            var connectionString = configuration.GetConnectionString("CosmosDb")!;
-            return new CosmosClient(connectionString, new CosmosClientOptions
-            {
-                SerializerOptions = new CosmosSerializationOptions
-                {
-                    PropertyNamingPolicy = CosmosPropertyNamingPolicy.CamelCase
-                }
-            });
-        });
-
-        var databaseName = configuration.GetValue<string>("CosmosDb:DatabaseName") ?? "workflow-ai";
-        services.AddSingleton(sp => new CosmosDbContext(sp.GetRequiredService<CosmosClient>(), databaseName));
-
-        services.AddScoped<IExecutionRepository, CosmosExecutionRepository>();
-        services.AddScoped<IApprovalRepository, CosmosApprovalRepository>();
-        services.AddScoped<INotificationRepository, CosmosNotificationRepository>();
-        services.AddScoped<IAIAgentTaskRepository, CosmosAIAgentTaskRepository>();
+        // Cosmos DB (Deprecated - no longer used)
+        //services.AddScoped<IExecutionRepository, CosmosExecutionRepository>();
+        //services.AddScoped<IApprovalRepository, CosmosApprovalRepository>();
+        //services.AddScoped<INotificationRepository, CosmosNotificationRepository>();
+        //services.AddScoped<IAIAgentTaskRepository, CosmosAIAgentTaskRepository>();
 
         // EF Core (PostgreSQL)
         services.AddDbContext<WorkflowAIDbContext>(options =>
@@ -67,6 +49,10 @@ public static class DependencyInjection
         services.AddScoped<IUserRepository, SqlUserRepository>();
         services.AddScoped<ITemplateRepository, SqlTemplateRepository>();
         services.AddScoped<IChannelRepository, SqlChannelRepository>();
+        services.AddScoped<IExecutionRepository, SqlExecutionRepository>();
+        services.AddScoped<IApprovalRepository, SqlApprovalRepository>();
+        services.AddScoped<INotificationRepository, SqlNotificationRepository>();
+        services.AddScoped<IAIAgentTaskRepository, SqlAIAgentTaskRepository>();
 
         // Service Bus
         services.AddSingleton(sp =>

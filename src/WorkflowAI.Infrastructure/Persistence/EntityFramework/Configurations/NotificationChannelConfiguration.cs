@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using WorkflowAI.Domain.Channels;
+using WorkflowAI.Domain.Connectors;
 
 namespace WorkflowAI.Infrastructure.Persistence.EntityFramework.Configurations;
 
@@ -24,5 +26,10 @@ public sealed class NotificationChannelConfiguration : IEntityTypeConfiguration<
             .IsRequired();
 
         builder.Property(c => c.ConnectionConfig).HasColumnType("text");
+
+        builder.Property(c => c.ConnectorId)
+            .HasConversion(new ValueConverter<ConnectorId?, Guid?>(
+                id => id.HasValue ? id.Value.Value : null,
+                value => value.HasValue ? ConnectorId.From(value.Value) : null));
     }
 }

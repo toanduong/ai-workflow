@@ -21,7 +21,42 @@ public class CreateWorkflowCommandHandlerTests
     {
         _currentUserService.UserId.Returns(UserId.New());
         var handler = CreateHandler();
-        var command = new CreateWorkflowCommand("Test Workflow", "Description", null, null);
+        var templateId = Guid.NewGuid();
+        var steps = new List<CreateWorkflowStepDto>
+{
+    new CreateWorkflowStepDto(
+        Name: "Send Welcome Email",
+        StepType: "Notification",
+        Configuration: "https://api.internal/notifications/welcome",
+        RequiredRole: null,
+        TimeoutMinutes: 30,
+        OnTimeoutAction: null),
+
+    new CreateWorkflowStepDto(
+        Name: "AI KYC Verification",
+        StepType: "AIAgent",
+        Configuration: "https://api.internal/agents/kyc-verify",
+        RequiredRole: null,
+        TimeoutMinutes: 60,
+        OnTimeoutAction: "Skip"),
+
+    new CreateWorkflowStepDto(
+        Name: "Manager Approval",
+        StepType: "HumanApproval",
+        Configuration: null,
+        RequiredRole: "Manager",
+        TimeoutMinutes: 1440,
+        OnTimeoutAction: "Escalate"),
+
+    new CreateWorkflowStepDto(
+        Name: "Provision Account",
+        StepType: "Action",
+        Configuration: "https://api.internal/accounts/provision",
+        RequiredRole: null,
+        TimeoutMinutes: 15,
+        OnTimeoutAction: "Retry")
+};
+        var command = new CreateWorkflowCommand("Test Workflow", "Description", templateId, steps);
 
         var result = await handler.Handle(command, CancellationToken.None);
 
