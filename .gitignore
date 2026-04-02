@@ -58,7 +58,13 @@ local.settings.json
 *.publishsettings
 appsettings.*.json
 !appsettings.json
+
+## Local notes / dev scripts (contain secrets)
+lenhchay.md
+note.txt
 !appsettings.Development.json
 
 ## Claude Code
 .claude/
+note.txt
+note.txt

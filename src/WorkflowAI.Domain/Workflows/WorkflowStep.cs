@@ -60,4 +60,35 @@ public sealed class WorkflowStep : Entity<Guid>
         ConnectorId = connectorId;
         UpdatedAt = DateTime.UtcNow;
     }
+
+    public static WorkflowStep Restore(
+        Guid id,
+        WorkflowId workflowId,
+        int orderIndex,
+        string name,
+        StepType stepType,
+        string? configuration,
+        string? requiredRole,
+        int timeoutMinutes,
+        TimeoutAction onTimeoutAction,
+        ConnectorId? connectorId,
+        DateTime createdAt,
+        DateTime? updatedAt)
+    {
+        return new WorkflowStep
+        {
+            Id = id,
+            WorkflowId = workflowId,
+            OrderIndex = orderIndex,
+            Name = name,
+            StepType = stepType,
+            Configuration = configuration,
+            RequiredRole = requiredRole,
+            TimeoutMinutes = timeoutMinutes,
+            OnTimeoutAction = onTimeoutAction,
+            ConnectorId = connectorId,
+            CreatedAt = createdAt,
+            UpdatedAt = updatedAt
+        };
+    }
 }

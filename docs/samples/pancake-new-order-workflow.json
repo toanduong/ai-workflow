@@ -1,0 +1,30 @@
+{
+  "name": "Pancake-New-Order",
+  "description": "Workflow xử lý đơn hàng mới từ Pancake.vn: thông báo nội bộ → xác nhận thủ công → cập nhật trạng thái đơn",
+  "steps": [
+    {
+      "name": "Notify-Team",
+      "stepType": "Notification",
+      "configuration": "https://pancake.vn/api/v1/webhooks/order-received",
+      "requiredRole": null,
+      "timeoutMinutes": 5,
+      "onTimeoutAction": "Continue"
+    },
+    {
+      "name": "Approval-Order",
+      "stepType": "HumanApproval",
+      "configuration": null,
+      "requiredRole": "OrderManager",
+      "timeoutMinutes": 60,
+      "onTimeoutAction": "Reject"
+    },
+    {
+      "name": "Update-Order-Status",
+      "stepType": "Action",
+      "configuration": "https://pancake.vn/api/v1/orders/update-status",
+      "requiredRole": null,
+      "timeoutMinutes": 10,
+      "onTimeoutAction": "Retry"
+    }
+  ]
+}

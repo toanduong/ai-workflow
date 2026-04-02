@@ -1,6 +1,7 @@
 using Azure.Communication.Email;
 using Azure.Identity;
 using Azure.Messaging.ServiceBus;
+using Azure.ResourceManager;
 using Azure.Security.KeyVault.Secrets;
 using Azure.Storage.Blobs;
 using Microsoft.EntityFrameworkCore;
@@ -119,9 +120,12 @@ public static class DependencyInjection
             services.AddScoped<IKeyVaultService, NoOpKeyVaultService>();
         }
 
-        // Logic App Generator
+        // Logic App Generator + Deployer
         services.AddSingleton<StepToConnectorMapper>();
         services.AddScoped<ILogicAppScriptGenerator, LogicAppScriptGenerator>();
+        services.Configure<AzureResourcesOptions>(configuration.GetSection(AzureResourcesOptions.SectionName));
+        services.AddSingleton(new ArmClient(new DefaultAzureCredential()));
+        services.AddScoped<ILogicAppDeployer, LogicAppDeployer>();
 
         return services;
     }

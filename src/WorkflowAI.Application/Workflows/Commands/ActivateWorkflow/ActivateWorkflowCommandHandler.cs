@@ -7,9 +7,13 @@ namespace WorkflowAI.Application.Workflows.Commands.ActivateWorkflow;
 
 public sealed class ActivateWorkflowCommandHandler(
     IWorkflowRepository workflowRepository,
-    ILogicAppScriptGenerator scriptGenerator)
+    ILogicAppScriptGenerator scriptGenerator,
+    ILogicAppDeployer logicAppDeployer,
+    IBlobStorageService blobStorageService)
     : IRequestHandler<ActivateWorkflowCommand, Result<ActivateWorkflowResult>>
 {
+    private const string ArmTemplatesContainer = "arm-templates";
+
     public async Task<Result<ActivateWorkflowResult>> Handle(
         ActivateWorkflowCommand request, CancellationToken cancellationToken)
     {
@@ -27,8 +31,23 @@ public sealed class ActivateWorkflowCommandHandler(
         if (!generationResult.Success)
             return Error.Unexpected("Workflow.GenerationFailed", generationResult.ErrorMessage ?? "Failed to generate Logic App template.");
 
+        await blobStorageService.UploadAsync(
+            ArmTemplatesContainer,
+            generationResult.FileName,
+            generationResult.Content,
+            cancellationToken);
+
+        var deployResult = await logicAppDeployer.DeployArmTemplateAsync(
+            generationResult.Content, workflow.Name, cancellationToken);
+
+        if (!deployResult.Success)
+            return Error.Unexpected("Workflow.DeployFailed", deployResult.ErrorMessage ?? "Failed to deploy Logic App.");
+
+        if (deployResult.ResourceId is not null)
+            workflow.SetLogicAppResourceId(deployResult.ResourceId);
+
         await workflowRepository.UpdateAsync(workflow, cancellationToken);
 
-        return new ActivateWorkflowResult(generationResult.Content, generationResult.FileName);
+        return new ActivateWorkflowResult(generationResult.Content, generationResult.FileName, deployResult.ResourceId);
     }
 }
