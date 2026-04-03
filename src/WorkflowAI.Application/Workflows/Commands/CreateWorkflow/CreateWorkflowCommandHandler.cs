@@ -34,13 +34,19 @@ public sealed class CreateWorkflowCommandHandler(
                     ? TimeoutAction.FromName(stepDto.OnTimeoutAction)
                     : null;
 
+                var connectorId = stepDto.ConnectorId.HasValue
+                    ? WorkflowAI.Domain.Connectors.ConnectorId.From(stepDto.ConnectorId.Value)
+                    : (WorkflowAI.Domain.Connectors.ConnectorId?)null;
+
                 var result = workflow.AddStep(
                     stepDto.Name,
                     stepType,
+                    stepDto.Method,
                     stepDto.Configuration,
                     stepDto.RequiredRole,
                     stepDto.TimeoutMinutes,
-                    timeoutAction);
+                    timeoutAction,
+                    connectorId);
 
                 if (result.IsFailure)
                     return Result<WorkflowId>.Failure(result.Error!);

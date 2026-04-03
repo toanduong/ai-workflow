@@ -107,6 +107,10 @@ public static class DependencyInjection
         services.AddScoped<IConnectorRepository, SqlConnectorRepository>();
         services.AddScoped<IConnectorService, ConnectorService>();
         services.AddScoped<IApiConnectionProvisioner, ApiConnectionProvisioner>();
+        services.AddScoped<IConnectorCredentialResolver, ConnectorCredentialResolver>();
+
+        // HTTP client for HttpStep execution
+        services.AddHttpClient<WorkflowAI.Application.Executions.Commands.ExecuteHttpStep.ExecuteHttpStepCommandHandler>();
 
         // Key Vault
         var keyVaultUri = configuration["KeyVault:Uri"];

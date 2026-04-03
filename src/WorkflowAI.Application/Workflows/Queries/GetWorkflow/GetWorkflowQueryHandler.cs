@@ -26,10 +26,12 @@ public sealed class GetWorkflowQueryHandler(
                 s.OrderIndex,
                 s.Name,
                 s.StepType.Name,
+                s.HttpMethod,
                 s.Configuration,
                 s.RequiredRole,
                 s.TimeoutMinutes,
-                s.OnTimeoutAction.Name)).ToList(),
+                s.OnTimeoutAction.Name,
+                s.ConnectorId?.Value)).ToList(),
             workflow.CreatedAt,
             workflow.LogicAppResourceId);
 

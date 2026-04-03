@@ -29,10 +29,11 @@ public sealed class LogicAppScriptGenerator(
         var actions = new JsonObject();
         var connections = new JsonObject();
         var hasConnections = false;
+        string? previousActionName = null;
 
         foreach (var step in workflow.Steps.OrderBy(s => s.OrderIndex))
         {
-            var actionType = stepMapper.MapToLogicAppActionType(step.StepType);
+            var actionType = stepMapper.MapToLogicAppActionType(step.StepType, step.Configuration);
             var actionName = step.Name.Replace(" ", "_");
 
             if (step.ConnectorId.HasValue)
@@ -52,15 +53,37 @@ public sealed class LogicAppScriptGenerator(
                 }
             }
 
-            actions[actionName] = new JsonObject
+            var runAfter = previousActionName is null
+                ? new JsonObject()
+                : new JsonObject { [previousActionName] = new JsonArray { (JsonNode)"Succeeded" } };
+
+            JsonObject stepAction;
+            if (step.StepType.Name == nameof(StepType.HumanApproval) && string.IsNullOrWhiteSpace(step.Configuration))
             {
-                ["type"] = actionType,
-                ["inputs"] = new JsonObject
+                // HumanApproval without URL: emit a Compose step as a placeholder annotation
+                stepAction = new JsonObject
                 {
-                    ["method"] = "POST",
-                    ["uri"] = step.Configuration ?? ""
-                }
-            };
+                    ["type"] = "Compose",
+                    ["runAfter"] = runAfter,
+                    ["inputs"] = $"Waiting for human approval: {step.Name}"
+                };
+            }
+            else
+            {
+                stepAction = new JsonObject
+                {
+                    ["type"] = actionType,
+                    ["runAfter"] = runAfter,
+                    ["inputs"] = new JsonObject
+                    {
+                        ["method"] = step.HttpMethod ?? stepMapper.MapToHttpMethod(step.StepType),
+                        ["uri"] = step.Configuration ?? ""
+                    }
+                };
+            }
+
+            actions[actionName] = stepAction;
+            previousActionName = actionName;
         }
 
         builder.AddLogicAppWorkflow(workflow.Name.Replace(" ", "-"), actions, hasConnections ? connections : null);

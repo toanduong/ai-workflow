@@ -14,7 +14,9 @@ public sealed record WorkflowStepDto(
     int OrderIndex,
     string Name,
     string StepType,
+    string? Method,
     string? Configuration,
     string? RequiredRole,
     int TimeoutMinutes,
-    string OnTimeoutAction);
+    string OnTimeoutAction,
+    Guid? ConnectorId);

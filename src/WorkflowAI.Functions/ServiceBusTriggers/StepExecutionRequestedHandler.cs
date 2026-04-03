@@ -4,12 +4,19 @@ using MediatR;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using WorkflowAI.Application.AIAgent.Commands.ExecuteAIStep;
+using WorkflowAI.Application.Executions.Commands.ExecuteHttpStep;
 using WorkflowAI.Infrastructure.Messaging.ServiceBus.IntegrationEvents;
 
 namespace WorkflowAI.Functions.ServiceBusTriggers;
 
 public sealed class StepExecutionRequestedHandler(IMediator mediator, ILogger<StepExecutionRequestedHandler> logger)
 {
+    private static readonly IReadOnlySet<string> HttpStepTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "Notification",
+        "Action"
+    };
+
     [Function("HandleStepExecutionRequested")]
     public async Task Run(
         [ServiceBusTrigger("step-events", "step-executor", Connection = "ServiceBusConnection")]
@@ -27,9 +34,19 @@ public sealed class StepExecutionRequestedHandler(IMediator mediator, ILogger<St
         }
 
         logger.LogInformation(
-            "Step execution requested: StepExecutionId={StepExecutionId}",
-            integrationEvent.StepExecutionId);
+            "Step execution requested: ExecutionId={ExecutionId}, StepExecutionId={StepExecutionId}, StepType={StepType}",
+            integrationEvent.ExecutionId, integrationEvent.StepExecutionId, integrationEvent.StepType);
 
-        await mediator.Send(new ExecuteAIStepCommand(integrationEvent.StepExecutionId, null));
+        if (HttpStepTypes.Contains(integrationEvent.StepType))
+        {
+            await mediator.Send(new ExecuteHttpStepCommand(
+                integrationEvent.ExecutionId,
+                integrationEvent.StepExecutionId));
+        }
+        else
+        {
+            // Default: treat as AI agent step (AIAgent, HumanApproval, unknown types)
+            await mediator.Send(new ExecuteAIStepCommand(integrationEvent.StepExecutionId, null));
+        }
     }
 }
