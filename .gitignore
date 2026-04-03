@@ -64,6 +64,9 @@ lenhchay.md
 note.txt
 !appsettings.Development.json
 
+## Docs / samples
+docs/
+
 ## Claude Code
 .claude/
 note.txt

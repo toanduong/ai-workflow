@@ -1,4 +1,5 @@
 using WorkflowAI.Domain.Common;
+using WorkflowAI.Domain.Connectors;
 using WorkflowAI.Domain.Users;
 using WorkflowAI.Domain.Workflows.Events;
 
@@ -34,14 +35,15 @@ public sealed class Workflow : AggregateRoot<WorkflowId>
         return workflow;
     }
 
-    public Result AddStep(string name, StepType stepType, string? configuration = null,
-        string? requiredRole = null, int timeoutMinutes = 60, TimeoutAction? onTimeoutAction = null)
+    public Result AddStep(string name, StepType stepType, string? httpMethod = null,
+        string? configuration = null, string? requiredRole = null, int timeoutMinutes = 60,
+        TimeoutAction? onTimeoutAction = null, ConnectorId? connectorId = null)
     {
         if (Status != WorkflowStatus.Draft)
             return Error.Validation("Workflow.NotDraft", "Steps can only be added to draft workflows.");
 
         var step = WorkflowStep.Create(Id, _steps.Count, name, stepType,
-            configuration, requiredRole, timeoutMinutes, onTimeoutAction);
+            httpMethod, configuration, requiredRole, timeoutMinutes, onTimeoutAction, connectorId);
         _steps.Add(step);
         UpdatedAt = DateTime.UtcNow;
 

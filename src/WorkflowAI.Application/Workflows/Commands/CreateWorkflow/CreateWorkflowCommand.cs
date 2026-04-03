@@ -13,7 +13,9 @@ public sealed record CreateWorkflowCommand(
 public sealed record CreateWorkflowStepDto(
     string Name,
     string StepType,
-    string? Configuration,
-    string? RequiredRole,
+    string? Method = null,
+    string? Configuration = null,
+    string? RequiredRole = null,
     int TimeoutMinutes = 60,
-    string? OnTimeoutAction = null);
+    string? OnTimeoutAction = null,
+    Guid? ConnectorId = null);

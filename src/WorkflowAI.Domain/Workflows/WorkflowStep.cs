@@ -9,6 +9,7 @@ public sealed class WorkflowStep : Entity<Guid>
     public int OrderIndex { get; private set; }
     public string Name { get; private set; } = string.Empty;
     public StepType StepType { get; private set; } = StepType.Action;
+    public string? HttpMethod { get; private set; }
     public string? Configuration { get; private set; }
     public string? RequiredRole { get; private set; }
     public int TimeoutMinutes { get; private set; }
@@ -22,6 +23,7 @@ public sealed class WorkflowStep : Entity<Guid>
         int orderIndex,
         string name,
         StepType stepType,
+        string? httpMethod = null,
         string? configuration = null,
         string? requiredRole = null,
         int timeoutMinutes = 60,
@@ -35,6 +37,7 @@ public sealed class WorkflowStep : Entity<Guid>
             OrderIndex = orderIndex,
             Name = name,
             StepType = stepType,
+            HttpMethod = httpMethod,
             Configuration = configuration,
             RequiredRole = requiredRole,
             TimeoutMinutes = timeoutMinutes,
@@ -67,6 +70,7 @@ public sealed class WorkflowStep : Entity<Guid>
         int orderIndex,
         string name,
         StepType stepType,
+        string? httpMethod,
         string? configuration,
         string? requiredRole,
         int timeoutMinutes,
@@ -82,6 +86,7 @@ public sealed class WorkflowStep : Entity<Guid>
             OrderIndex = orderIndex,
             Name = name,
             StepType = stepType,
+            HttpMethod = httpMethod,
             Configuration = configuration,
             RequiredRole = requiredRole,
             TimeoutMinutes = timeoutMinutes,

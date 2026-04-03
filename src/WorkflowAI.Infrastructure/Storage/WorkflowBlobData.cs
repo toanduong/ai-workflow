@@ -58,6 +58,7 @@ internal sealed class WorkflowStepBlobData
     public int OrderIndex { get; init; }
     public string Name { get; init; } = string.Empty;
     public string StepTypeName { get; init; } = "Action";
+    public string? HttpMethod { get; init; }
     public string? Configuration { get; init; }
     public string? RequiredRole { get; init; }
     public int TimeoutMinutes { get; init; }
@@ -75,6 +76,7 @@ internal sealed class WorkflowStepBlobData
             OrderIndex = step.OrderIndex,
             Name = step.Name,
             StepTypeName = step.StepType.Name,
+            HttpMethod = step.HttpMethod,
             Configuration = step.Configuration,
             RequiredRole = step.RequiredRole,
             TimeoutMinutes = step.TimeoutMinutes,
@@ -93,6 +95,7 @@ internal sealed class WorkflowStepBlobData
             OrderIndex,
             Name,
             StepType.FromName(StepTypeName) ?? StepType.Action,
+            HttpMethod,
             Configuration,
             RequiredRole,
             TimeoutMinutes,
