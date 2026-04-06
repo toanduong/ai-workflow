@@ -1,3 +1,7 @@
+using Anthropic;
+using WorkflowAI.Domain.Apollo;
+using WorkflowAI.Domain.TenantConnectors;
+using WorkflowAI.Infrastructure.Apollo;
 using Azure.Communication.Email;
 using Azure.Identity;
 using Azure.Messaging.ServiceBus;
@@ -67,6 +71,16 @@ public static class DependencyInjection
         services.Configure<AzureOpenAIOptions>(configuration.GetSection(AzureOpenAIOptions.SectionName));
         services.AddScoped<IAzureOpenAIService, AzureOpenAIService>();
 
+        // Anthropic Claude
+        services.AddSingleton(sp =>
+        {
+            var apiKey = configuration["Anthropic:ApiKey"];
+            return string.IsNullOrEmpty(apiKey)
+                ? new AnthropicClient()
+                : new AnthropicClient(new Anthropic.Core.ClientOptions { ApiKey = apiKey });
+        });
+        services.AddScoped<IClaudeAIService, ClaudeAIService>();
+
         // Notification Adapters
         services.AddHttpClient<SlackNotificationAdapter>();
         services.AddHttpClient<TeamsNotificationAdapter>();
@@ -109,6 +123,15 @@ public static class DependencyInjection
         {
             services.AddScoped<IKeyVaultService, NoOpKeyVaultService>();
         }
+
+        // Apollo
+        services.Configure<ApolloOptions>(configuration.GetSection(ApolloOptions.SectionName));
+        services.AddHttpClient<IApolloService, ApolloService>();
+        services.AddScoped<IApolloEventRepository, SqlApolloEventRepository>();
+        services.AddScoped<ITenantConnectorRepository, SqlTenantConnectorRepository>();
+
+        // HTTP client for ValidateTenantConnector
+        services.AddHttpClient<WorkflowAI.Application.TenantConnectors.Commands.ValidateTenantConnector.ValidateTenantConnectorCommandHandler>();
 
         // Logic App Generator + Deployer
         services.AddSingleton<StepToConnectorMapper>();
