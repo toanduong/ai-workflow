@@ -58,16 +58,32 @@ public sealed class ClaudeAIService(
     {
         try
         {
-            var claudeTools = tools.Select(t => (ToolUnion)new Tool
+            var claudeTools = tools.Select(t =>
             {
-                Name = t.Name,
-                Description = t.Description,
-                InputSchema = new InputSchema
+                var schema = System.Text.Json.JsonSerializer
+                    .Deserialize<Dictionary<string, System.Text.Json.JsonElement>>(t.ParametersJson)
+                    ?? [];
+
+                var properties = schema.TryGetValue("properties", out var propsEl)
+                    ? System.Text.Json.JsonSerializer
+                        .Deserialize<Dictionary<string, System.Text.Json.JsonElement>>(propsEl.GetRawText())
+                      ?? []
+                    : [];
+
+                var required = schema.TryGetValue("required", out var reqEl)
+                    ? reqEl.EnumerateArray().Select(e => e.GetString()!).ToList()
+                    : new List<string>();
+
+                return (ToolUnion)new Tool
                 {
-                    Properties = System.Text.Json.JsonSerializer
-                        .Deserialize<Dictionary<string, System.Text.Json.JsonElement>>(t.ParametersJson)
-                        ?? []
-                }
+                    Name = t.Name,
+                    Description = t.Description,
+                    InputSchema = new InputSchema
+                    {
+                        Properties = properties,
+                        Required = required
+                    }
+                };
             }).ToList();
 
             var messages = new List<MessageParam>

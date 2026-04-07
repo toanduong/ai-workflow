@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\WorkflowAI.Infrastructure\WorkflowAI.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\WorkflowAI.Application\WorkflowAI.Application.csproj" />
   </ItemGroup>
 
   <ItemGroup>
