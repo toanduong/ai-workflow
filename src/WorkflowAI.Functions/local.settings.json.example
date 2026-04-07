@@ -1,0 +1,51 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
+    "PersistenceProvider": "Sql",
+
+    // ── Anthropic Claude ────────────────────────────────────────────────────
+    // Get your API key from https://console.anthropic.com
+    "Anthropic__ApiKey": "<your-anthropic-api-key>",
+    "Claude__Model": "claude-opus-4-6",
+    "Claude__MaxTokens": "16000",
+
+    // ── Azure OpenAI (optional — only needed for OpenAI-backed features) ───
+    "AzureOpenAI__Endpoint": "https://<openai-resource>.openai.azure.com/",
+    "AzureOpenAI__ApiKey": "<your-azure-openai-api-key>",
+    "AzureOpenAI__DefaultModel": "gpt-4",
+
+    // ── Security ────────────────────────────────────────────────────────────
+    // Must be at least 32 characters
+    "Security__ApprovalTokenSigningKey": "<your-signing-key-min-32-chars>",
+
+    // ── Azure Key Vault (optional in dev — leave empty to use no-op) ───────
+    // Set to your Key Vault URI in production, e.g. https://my-vault.vault.azure.net/
+    // When empty, credential storage is silently skipped (dev only)
+    "KeyVault__Uri": "",
+
+    // ── Azure Resources (optional — only needed for Logic App deployment) ──
+    "AzureResources__SubscriptionId": "<your-azure-subscription-id>",
+    "AzureResources__ResourceGroupName": "<your-resource-group>",
+    "AzureResources__DeployEnabled": "false",
+
+    // ── Service Bus (optional — only needed for async messaging) ───────────
+    "ServiceBusConnection": "Endpoint=sb://<servicebus-namespace>.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=<key>"
+  },
+  "ConnectionStrings": {
+    // ── PostgreSQL ──────────────────────────────────────────────────────────
+    // Default matches docker-compose.yml — no changes needed for local dev
+    "SqlDb": "Host=localhost;Port=5433;Database=workflowai_dev;Username=postgres;Password=devpassword;Ssl Mode=Disable",
+    "PostgreSql": "Host=localhost;Port=5433;Database=workflowai_dev;Username=postgres;Password=devpassword;Ssl Mode=Disable",
+
+    // ── Azure Blob Storage (optional) ──────────────────────────────────────
+    "BlobStorage": "DefaultEndpointsProtocol=https;AccountName=<storage-account>;AccountKey=<key>;EndpointSuffix=core.windows.net",
+
+    // ── Service Bus (optional) ──────────────────────────────────────────────
+    "ServiceBus": "Endpoint=sb://<servicebus-namespace>.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=<key>",
+
+    // ── Azure Communication Services (optional) ─────────────────────────────
+    "AzureCommunicationServices": "endpoint=https://<acs-resource>.communication.azure.com/;accesskey=<key>"
+  }
+}
