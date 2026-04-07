@@ -11,6 +11,8 @@
     <!-- Mapping -->
     <PackageVersion Include="Mapster" Version="10.0.0" />
     <PackageVersion Include="Mapster.DependencyInjection" Version="10.0.0" />
+    <!-- Anthropic Claude SDK -->
+    <PackageVersion Include="Anthropic" Version="12.11.0" />
     <!-- Azure SDKs -->
     <PackageVersion Include="Microsoft.Azure.Cosmos" Version="3.46.1" />
     <PackageVersion Include="Azure.Messaging.ServiceBus" Version="7.18.4" />

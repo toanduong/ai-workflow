@@ -1,3 +1,6 @@
+using System.Net;
+using System.Net.Http.Headers;
+using System.Text;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -10,233 +13,309 @@ namespace WorkflowAI.Application.UnitTests.TenantConnectors;
 
 public class ValidateTenantConnectorCommandHandlerTests
 {
-    private readonly ITenantConnectorRepository _repository =
-        Substitute.For<ITenantConnectorRepository>();
-    private readonly IAnthropicService _anthropicService =
-        Substitute.For<IAnthropicService>();
-    private readonly IConnectorHttpValidator _httpValidator =
-        Substitute.For<IConnectorHttpValidator>();
+    private readonly ITenantConnectorRepository _repository = Substitute.For<ITenantConnectorRepository>();
+    private readonly IKeyVaultService _keyVaultService = Substitute.For<IKeyVaultService>();
+    private readonly ICurrentUserService _currentUserService = Substitute.For<ICurrentUserService>();
 
-    private ValidateTenantConnectorCommandHandler CreateHandler() =>
-        new(_repository, _anthropicService, _httpValidator,
-            NullLogger<ValidateTenantConnectorCommandHandler>.Instance);
+    public ValidateTenantConnectorCommandHandlerTests()
+    {
+        _currentUserService.IsAuthenticated.Returns(true);
+        _keyVaultService
+            .SetSecretAsync(Arg.Any<string>(), Arg.Any<string>(), ct: Arg.Any<CancellationToken>())
+            .Returns(("fake-secret", "1"));
+    }
 
-    // ── Claude-generated metadata fixtures ────────────────────────────────────
-    //
-    // These JSON blobs represent what Claude returns during Provision.
-    // The application code never decides what fields are needed — Claude does.
-    // The frontend reads requiredFields and builds the form; the admin fills it in.
-    // The credentials dict the admin submits always matches requiredFields exactly.
+    private ValidateTenantConnectorCommandHandler CreateHandler(HttpClient httpClient) =>
+        new(_repository,
+            new TestCredentialApplicatorFactory(),
+            _keyVaultService,
+            _currentUserService,
+            NullLogger<ValidateTenantConnectorCommandHandler>.Instance,
+            httpClient);
 
-    // Claude returned a fixed baseUrl — admin only fills auth field(s)
-    private const string MetadataWithFixedBaseUrl = """
-        {
-          "authType": "APIKey",
-          "baseUrl": "https://api.example.com",
-          "testEndpoint": { "method": "GET", "path": "/health" },
-          "requiredFields": ["api_key"]
-        }
-        """;
-
-    // Claude returned a {placeholder} baseUrl — admin fills auth + instance URL
-    // This happens when the service is tenant-hosted (each customer has their own URL)
-    private const string MetadataWithTemplatedBaseUrl = """
-        {
-          "authType": "APIKey",
-          "baseUrl": "{instance_url}",
-          "testEndpoint": { "method": "GET", "path": "/health" },
-          "requiredFields": ["api_key", "instance_url"]
-        }
-        """;
-
-    // ── Admin credential submissions ──────────────────────────────────────────
-    //
-    // Keys always match Claude's requiredFields — the frontend enforces this by
-    // rendering exactly one input per requiredField and using the field name as the key.
-
-    // Admin filled the single-field form (api_key only)
-    private static IReadOnlyDictionary<string, string> SingleFieldCredentials() =>
-        new Dictionary<string, string> { ["api_key"] = "valid-api-key" };
-
-    // Admin filled the two-field form (api_key + instance_url)
-    private static IReadOnlyDictionary<string, string> TwoFieldCredentials() =>
-        new Dictionary<string, string>
-        {
-            ["api_key"]      = "valid-api-key",
-            ["instance_url"] = "https://mycompany.example.com"
-        };
-
-    // ── Discovered API operations (Claude's response during Validate) ─────────
-
-    private static readonly string ValidApiDiscoveryResponse = """
-        [
-          {
-            "apiName": "contacts/list",
-            "httpMethod": "GET",
-            "urlTemplate": "https://api.example.com/v1/contacts",
-            "metadata": { "headers": { "X-Api-Key": "$secret" } }
-          },
-          {
-            "apiName": "orders/create",
-            "httpMethod": "POST",
-            "urlTemplate": "https://api.example.com/v1/orders",
-            "metadata": { "headers": { "X-Api-Key": "$secret" } }
-          },
-          {
-            "apiName": "products/list",
-            "httpMethod": "GET",
-            "urlTemplate": "https://api.example.com/v1/products",
-            "metadata": { "headers": { "X-Api-Key": "$secret" } }
-          }
-        ]
-        """;
-
-    // ── Tests ─────────────────────────────────────────────────────────────────
+    // ── APIKey auth ──────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task Handle_ShouldReturnNotFound_WhenConnectorDoesNotExist()
+    public async Task Handle_ValidApolloApiKey_ActivatesConnector()
+    {
+        var connector = new TenantConnectorBuilder()
+            .WithConnectorName("Apollo")
+            .Build();
+
+        _repository.GetByIdAsync(connector.Id, Arg.Any<CancellationToken>())
+            .Returns(connector);
+
+        var httpClient = CreateMockHttpClient(HttpStatusCode.OK);
+        var command = new ValidateTenantConnectorCommand(
+            connector.Id.Value,
+            new Dictionary<string, string> { ["api_key"] = "valid-apollo-api-key" });
+
+        var result = await CreateHandler(httpClient).Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().BeTrue();
+        connector.Status.Should().Be(TenantConnectorStatus.Active);
+        await _repository.Received(1).UpdateAsync(
+            Arg.Is<TenantConnector>(c => c.Status == TenantConnectorStatus.Active),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_InvalidApiKey_MarksConnectorFailed()
+    {
+        var connector = new TenantConnectorBuilder()
+            .WithConnectorName("Apollo")
+            .Build();
+
+        _repository.GetByIdAsync(connector.Id, Arg.Any<CancellationToken>())
+            .Returns(connector);
+
+        var httpClient = CreateMockHttpClient(HttpStatusCode.Unauthorized);
+        var command = new ValidateTenantConnectorCommand(
+            connector.Id.Value,
+            new Dictionary<string, string> { ["api_key"] = "invalid-key" });
+
+        var result = await CreateHandler(httpClient).Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().BeFalse();
+        connector.Status.Should().Be(TenantConnectorStatus.Failed);
+    }
+
+    // ── Bearer / OAuth2 auth ─────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Handle_BearerAuth_AppliesAuthorizationHeader()
+    {
+        var connector = new TenantConnectorBuilder()
+            .WithConnectorName("Salesforce")
+            .WithMetadata(
+                """{"authType":"Bearer","requiredFields":["token"],"testEndpoint":{"method":"GET","path":"https://salesforce.example.com/services/data/v57.0"}}""",
+                """{"description":"Salesforce CRM","docsUrl":"","capabilities":[],"rateLimits":"","webhookSupport":false}""")
+            .Build();
+
+        _repository.GetByIdAsync(connector.Id, Arg.Any<CancellationToken>())
+            .Returns(connector);
+
+        HttpRequestMessage? captured = null;
+        var httpClient = CreateCapturingHttpClient(HttpStatusCode.OK, req => captured = req);
+
+        var command = new ValidateTenantConnectorCommand(
+            connector.Id.Value,
+            new Dictionary<string, string> { ["token"] = "my-bearer-token" });
+
+        await CreateHandler(httpClient).Handle(command, CancellationToken.None);
+
+        captured!.Headers.Authorization!.Scheme.Should().Be("Bearer");
+        captured.Headers.Authorization.Parameter.Should().Be("my-bearer-token");
+    }
+
+    // ── Basic auth ───────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Handle_BasicAuth_AppliesBase64Credentials()
+    {
+        var connector = new TenantConnectorBuilder()
+            .WithConnectorName("Jira")
+            .WithMetadata(
+                """{"authType":"Basic","requiredFields":["username","password"],"testEndpoint":{"method":"GET","path":"https://jira.example.com/rest/api/2/myself"}}""",
+                """{"description":"Jira project management","docsUrl":"","capabilities":[],"rateLimits":"","webhookSupport":false}""")
+            .Build();
+
+        _repository.GetByIdAsync(connector.Id, Arg.Any<CancellationToken>())
+            .Returns(connector);
+
+        HttpRequestMessage? captured = null;
+        var httpClient = CreateCapturingHttpClient(HttpStatusCode.OK, req => captured = req);
+
+        var command = new ValidateTenantConnectorCommand(
+            connector.Id.Value,
+            new Dictionary<string, string> { ["username"] = "user", ["password"] = "pass" });
+
+        await CreateHandler(httpClient).Handle(command, CancellationToken.None);
+
+        captured!.Headers.Authorization!.Scheme.Should().Be("Basic");
+        var decoded = System.Text.Encoding.UTF8.GetString(
+            Convert.FromBase64String(captured.Headers.Authorization.Parameter!));
+        decoded.Should().Be("user:pass");
+    }
+
+    // ── Edge cases ───────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Handle_ConnectorNotFound_ReturnsNotFoundError()
     {
         _repository.GetByIdAsync(Arg.Any<TenantConnectorId>(), Arg.Any<CancellationToken>())
             .Returns((TenantConnector?)null);
 
-        var result = await CreateHandler().Handle(
-            new ValidateTenantConnectorCommand(Guid.NewGuid(), SingleFieldCredentials()),
-            CancellationToken.None);
+        var command = new ValidateTenantConnectorCommand(
+            Guid.NewGuid(),
+            new Dictionary<string, string> { ["api_key"] = "any" });
+
+        var result = await CreateHandler(CreateMockHttpClient(HttpStatusCode.OK))
+            .Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
         result.Error!.Code.Should().Be("TenantConnector.NotFound");
     }
 
     [Fact]
-    public async Task Handle_ShouldActivateAndDiscoverApis_WhenConnectionSucceeds()
+    public async Task Handle_MetadataHasNoTestEndpoint_MarksConnectorFailed()
     {
-        // Connector whose Claude-generated metadata has a fixed baseUrl
         var connector = new TenantConnectorBuilder()
             .WithConnectorName("Apollo")
-            .WithMetadata(MetadataWithFixedBaseUrl, "{}")
+            .WithMetadata(
+                """{"authType":"APIKey","requiredFields":["api_key"],"endpoints":{}}""",
+                """{"description":"Apollo","docsUrl":"","capabilities":[],"rateLimits":"","webhookSupport":false}""")
             .Build();
 
-        _repository.GetByIdAsync(Arg.Any<TenantConnectorId>(), Arg.Any<CancellationToken>())
+        _repository.GetByIdAsync(connector.Id, Arg.Any<CancellationToken>())
             .Returns(connector);
-        _httpValidator.TestAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns((true, (string?)null));
-        _anthropicService.CompleteAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
-            .Returns(new AICompletionResult(ValidApiDiscoveryResponse, 500, true));
 
-        var result = await CreateHandler().Handle(
-            new ValidateTenantConnectorCommand(connector.Id.Value, SingleFieldCredentials()),
-            CancellationToken.None);
+        var command = new ValidateTenantConnectorCommand(
+            connector.Id.Value,
+            new Dictionary<string, string> { ["api_key"] = "some-key" });
 
-        result.IsSuccess.Should().BeTrue();
-        result.Value!.IsValid.Should().BeTrue();
-        result.Value.ApiOperationsDiscovered.Should().Be(3);
-        connector.Status.Should().Be(TenantConnectorStatus.Active);
-        await _repository.Received(1).AddApisAsync(
-            Arg.Is<IEnumerable<TenantConnectorApi>>(apis => apis.Count() == 3),
-            Arg.Any<CancellationToken>());
-    }
+        var result = await CreateHandler(CreateMockHttpClient(HttpStatusCode.OK))
+            .Handle(command, CancellationToken.None);
 
-    [Fact]
-    public async Task Handle_ShouldSubstitutePlaceholderInBaseUrl_WhenClaudeGeneratedTemplate()
-    {
-        // Claude generated "{instance_url}" in baseUrl because this connector is tenant-hosted.
-        // The frontend read requiredFields = ["api_key","instance_url"], rendered two form fields,
-        // and the admin filled both. The credentials dict is what the frontend collected.
-        var connector = new TenantConnectorBuilder()
-            .WithConnectorName("TenantHostedService")
-            .WithMetadata(MetadataWithTemplatedBaseUrl, "{}")
-            .Build();
-
-        _repository.GetByIdAsync(Arg.Any<TenantConnectorId>(), Arg.Any<CancellationToken>())
-            .Returns(connector);
-        _httpValidator.TestAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns((true, (string?)null));
-        _anthropicService.CompleteAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
-            .Returns(new AICompletionResult("[]", 100, true));
-
-        await CreateHandler().Handle(
-            new ValidateTenantConnectorCommand(connector.Id.Value, TwoFieldCredentials()),
-            CancellationToken.None);
-
-        // The handler must substitute {instance_url} with the credential value before probing
-        await _httpValidator.Received(1).TestAsync(
-            Arg.Is<string>(url => url.StartsWith("https://mycompany.example.com")),
-            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task Handle_ShouldMarkFailed_WhenConnectionReturns401()
-    {
-        var connector = new TenantConnectorBuilder()
-            .WithConnectorName("HubSpot")
-            .WithMetadata(MetadataWithFixedBaseUrl, "{}")
-            .Build();
-
-        _repository.GetByIdAsync(Arg.Any<TenantConnectorId>(), Arg.Any<CancellationToken>())
-            .Returns(connector);
-        _httpValidator.TestAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns((false, "HTTP 401: Unauthorized"));
-
-        var result = await CreateHandler().Handle(
-            new ValidateTenantConnectorCommand(connector.Id.Value, SingleFieldCredentials()),
-            CancellationToken.None);
-
-        result.IsSuccess.Should().BeTrue();
-        result.Value!.IsValid.Should().BeFalse();
-        result.Value.FailureReason.Should().Contain("401");
+        result.Value.Should().BeFalse();
         connector.Status.Should().Be(TenantConnectorStatus.Failed);
-        // Claude must NOT be called for API discovery if the HTTP test failed
-        await _anthropicService.DidNotReceive()
-            .CompleteAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        connector.FailureReason.Should().Contain("testEndpoint");
     }
 
     [Fact]
-    public async Task Handle_ShouldDeleteOldApis_BeforeAddingNew_WhenRevalidating()
+    public async Task Handle_NetworkFailure_MarksConnectorFailed()
     {
         var connector = new TenantConnectorBuilder()
-            .WithConnectorName("Stripe")
-            .WithMetadata(MetadataWithFixedBaseUrl, "{}")
-            .Activated()
+            .WithConnectorName("Apollo")
             .Build();
 
-        _repository.GetByIdAsync(Arg.Any<TenantConnectorId>(), Arg.Any<CancellationToken>())
+        _repository.GetByIdAsync(connector.Id, Arg.Any<CancellationToken>())
             .Returns(connector);
-        _httpValidator.TestAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns((true, (string?)null));
-        _anthropicService.CompleteAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
-            .Returns(new AICompletionResult(ValidApiDiscoveryResponse, 500, true));
 
-        await CreateHandler().Handle(
-            new ValidateTenantConnectorCommand(connector.Id.Value, SingleFieldCredentials()),
-            CancellationToken.None);
+        var command = new ValidateTenantConnectorCommand(
+            connector.Id.Value,
+            new Dictionary<string, string> { ["api_key"] = "any" });
 
-        await _repository.Received(1).DeleteApisByConnectorAsync(
-            connector.Id, Arg.Any<CancellationToken>());
+        var result = await CreateHandler(
+            CreateThrowingHttpClient(new HttpRequestException("Network unreachable")))
+            .Handle(command, CancellationToken.None);
+
+        result.Value.Should().BeFalse();
+        connector.Status.Should().Be(TenantConnectorStatus.Failed);
+        connector.FailureReason.Should().Be("Network unreachable");
     }
 
-    [Fact]
-    public async Task Handle_ShouldStillActivate_WhenClaudeApiDiscoveryFails()
+    // ── Helpers ──────────────────────────────────────────────────────────────
+
+    private static HttpClient CreateMockHttpClient(HttpStatusCode statusCode) =>
+        new(new StubHttpMessageHandler(statusCode));
+
+    private static HttpClient CreateCapturingHttpClient(
+        HttpStatusCode statusCode, Action<HttpRequestMessage> capture) =>
+        new(new CapturingHttpMessageHandler(statusCode, capture));
+
+    private static HttpClient CreateThrowingHttpClient(Exception ex) =>
+        new(new ThrowingHttpMessageHandler(ex));
+}
+
+// ── Test credential applicators (mirror Infrastructure implementations) ────
+
+internal sealed class TestApiKeyApplicator : ICredentialApplicator
+{
+    public string AuthType => "APIKey";
+    public void Apply(HttpRequestMessage request, IReadOnlyDictionary<string, string> fields)
     {
-        var connector = new TenantConnectorBuilder()
-            .WithConnectorName("Salesforce")
-            .WithMetadata(MetadataWithFixedBaseUrl, "{}")
-            .Build();
-
-        _repository.GetByIdAsync(Arg.Any<TenantConnectorId>(), Arg.Any<CancellationToken>())
-            .Returns(connector);
-        _httpValidator.TestAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns((true, (string?)null));
-        _anthropicService.CompleteAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
-            .Returns(new AICompletionResult(string.Empty, 0, false, "timeout"));
-
-        var result = await CreateHandler().Handle(
-            new ValidateTenantConnectorCommand(connector.Id.Value, SingleFieldCredentials()),
-            CancellationToken.None);
-
-        // Connection succeeded — connector is Active even if Claude timed out for API discovery
-        result.IsSuccess.Should().BeTrue();
-        result.Value!.IsValid.Should().BeTrue();
-        result.Value!.ApiOperationsDiscovered.Should().Be(0);
-        connector.Status.Should().Be(TenantConnectorStatus.Active);
+        if (fields.TryGetValue("api_key", out var key) || fields.TryGetValue("apiKey", out key))
+            request.Headers.Add("X-Api-Key", key);
     }
+}
+
+internal sealed class TestBearerApplicator : ICredentialApplicator
+{
+    public string AuthType => "Bearer";
+    public void Apply(HttpRequestMessage request, IReadOnlyDictionary<string, string> fields)
+    {
+        if (fields.TryGetValue("token", out var token) ||
+            fields.TryGetValue("access_token", out token) ||
+            fields.TryGetValue("bearer_token", out token))
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        }
+    }
+}
+
+internal sealed class TestOAuth2Applicator : ICredentialApplicator
+{
+    public string AuthType => "OAuth2";
+    public void Apply(HttpRequestMessage request, IReadOnlyDictionary<string, string> fields)
+    {
+        if (fields.TryGetValue("access_token", out var token) || fields.TryGetValue("token", out token))
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+    }
+}
+
+internal sealed class TestBasicApplicator : ICredentialApplicator
+{
+    public string AuthType => "Basic";
+    public void Apply(HttpRequestMessage request, IReadOnlyDictionary<string, string> fields)
+    {
+        if (fields.TryGetValue("username", out var username) && fields.TryGetValue("password", out var password))
+        {
+            var creds = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{username}:{password}"));
+            request.Headers.Authorization = new AuthenticationHeaderValue("Basic", creds);
+        }
+    }
+}
+
+internal sealed class TestDefaultApplicator : ICredentialApplicator
+{
+    public string AuthType => "Default";
+    public void Apply(HttpRequestMessage request, IReadOnlyDictionary<string, string> fields)
+    {
+        foreach (var (key, value) in fields)
+            request.Headers.TryAddWithoutValidation(key, value);
+    }
+}
+
+internal sealed class TestCredentialApplicatorFactory : ICredentialApplicatorFactory
+{
+    private readonly ICredentialApplicator[] _applicators =
+    [
+        new TestApiKeyApplicator(),
+        new TestBearerApplicator(),
+        new TestOAuth2Applicator(),
+        new TestBasicApplicator(),
+        new TestDefaultApplicator()
+    ];
+
+    public ICredentialApplicator Resolve(string authType) =>
+        _applicators.FirstOrDefault(a => a.AuthType.Equals(authType, StringComparison.OrdinalIgnoreCase))
+        ?? _applicators.First(a => a.AuthType == "Default");
+}
+
+internal sealed class StubHttpMessageHandler(HttpStatusCode statusCode) : HttpMessageHandler
+{
+    protected override Task<HttpResponseMessage> SendAsync(
+        HttpRequestMessage request, CancellationToken cancellationToken)
+        => Task.FromResult(new HttpResponseMessage(statusCode));
+}
+
+internal sealed class CapturingHttpMessageHandler(
+    HttpStatusCode statusCode, Action<HttpRequestMessage> capture) : HttpMessageHandler
+{
+    protected override Task<HttpResponseMessage> SendAsync(
+        HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        capture(request);
+        return Task.FromResult(new HttpResponseMessage(statusCode));
+    }
+}
+
+internal sealed class ThrowingHttpMessageHandler(Exception exception) : HttpMessageHandler
+{
+    protected override Task<HttpResponseMessage> SendAsync(
+        HttpRequestMessage request, CancellationToken cancellationToken)
+        => throw exception;
 }

@@ -17,7 +17,7 @@ namespace WorkflowAI.Infrastructure.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.5")
+                .HasAnnotation("ProductVersion", "9.0.5")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -487,6 +487,9 @@ namespace WorkflowAI.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("CredentialSecretNames")
+                        .HasColumnType("text");
+
                     b.Property<string>("FailureReason")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
@@ -613,6 +616,46 @@ namespace WorkflowAI.Infrastructure.Migrations
                     b.ToTable("Users", (string)null);
                 });
 
+            modelBuilder.Entity("WorkflowAI.Domain.Workflows.Workflow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("LogicAppResourceId")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid?>("TemplateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Workflows", (string)null);
+                });
+
             modelBuilder.Entity("WorkflowAI.Domain.Approvals.ApprovalAction", b =>
                 {
                     b.HasOne("WorkflowAI.Domain.Approvals.ApprovalRequest", null)
@@ -637,6 +680,70 @@ namespace WorkflowAI.Infrastructure.Migrations
                     b.HasOne("WorkflowAI.Domain.Executions.WorkflowExecution", null)
                         .WithMany("Steps")
                         .HasForeignKey("WorkflowExecutionId1");
+                });
+
+            modelBuilder.Entity("WorkflowAI.Domain.Workflows.Workflow", b =>
+                {
+                    b.OwnsMany("WorkflowAI.Domain.Workflows.WorkflowStep", "Steps", b1 =>
+                        {
+                            b1.Property<Guid>("Id")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("uuid");
+
+                            b1.Property<string>("Configuration")
+                                .HasColumnType("text");
+
+                            b1.Property<Guid?>("ConnectorId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<DateTime>("CreatedAt")
+                                .HasColumnType("timestamp with time zone");
+
+                            b1.Property<string>("HttpMethod")
+                                .HasColumnType("text");
+
+                            b1.Property<string>("Name")
+                                .IsRequired()
+                                .HasMaxLength(200)
+                                .HasColumnType("character varying(200)");
+
+                            b1.Property<string>("OnTimeoutAction")
+                                .IsRequired()
+                                .HasMaxLength(50)
+                                .HasColumnType("character varying(50)");
+
+                            b1.Property<int>("OrderIndex")
+                                .HasColumnType("integer");
+
+                            b1.Property<string>("RequiredRole")
+                                .HasMaxLength(100)
+                                .HasColumnType("character varying(100)");
+
+                            b1.Property<string>("StepType")
+                                .IsRequired()
+                                .HasMaxLength(50)
+                                .HasColumnType("character varying(50)");
+
+                            b1.Property<int>("TimeoutMinutes")
+                                .HasColumnType("integer");
+
+                            b1.Property<DateTime?>("UpdatedAt")
+                                .HasColumnType("timestamp with time zone");
+
+                            b1.Property<Guid>("WorkflowId")
+                                .HasColumnType("uuid");
+
+                            b1.HasKey("Id");
+
+                            b1.HasIndex("WorkflowId");
+
+                            b1.ToTable("WorkflowSteps", (string)null);
+
+                            b1.WithOwner()
+                                .HasForeignKey("WorkflowId");
+                        });
+
+                    b.Navigation("Steps");
                 });
 
             modelBuilder.Entity("WorkflowAI.Domain.Approvals.ApprovalRequest", b =>

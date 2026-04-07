@@ -13,9 +13,9 @@ public sealed class ListTenantConnectorsFunction(IMediator mediator)
     public async Task<HttpResponseData> Run(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "tenants/{tenantId}/connectors")]
         HttpRequestData req,
-        string tenantId)
+        Guid tenantId)
     {
-        var query = new ListTenantConnectorsQuery(Guid.Parse(tenantId));
+        var query = new ListTenantConnectorsQuery(tenantId);
         var result = await mediator.Send(query);
         return await req.CreateResultResponseAsync(result);
     }

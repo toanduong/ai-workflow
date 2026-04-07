@@ -12,38 +12,25 @@ public sealed class TenantConnectorConfiguration : IEntityTypeConfiguration<Tena
 
         builder.HasKey(e => e.Id);
         builder.Property(e => e.Id)
-            .HasConversion(id => id.Value, v => TenantConnectorId.From(v));
+            .HasConversion(id => id.Value, value => TenantConnectorId.From(value));
 
         builder.Property(e => e.TenantId)
-            .HasConversion(id => id.Value, v => TenantId.From(v))
+            .HasConversion(id => id.Value, value => TenantId.From(value))
             .IsRequired();
 
-        builder.Property(e => e.ConnectorName)
-            .HasMaxLength(200)
-            .IsRequired();
+        builder.Property(e => e.ConnectorName).HasMaxLength(200).IsRequired();
 
-        builder.Property(e => e.Metadata)
-            .HasColumnType("text")
-            .IsRequired();
-
-        builder.Property(e => e.Info)
-            .HasColumnType("text")
-            .IsRequired();
+        builder.Property(e => e.Metadata).HasColumnType("text").IsRequired();
+        builder.Property(e => e.Info).HasColumnType("text").IsRequired();
 
         builder.Property(e => e.Status)
-            .HasConversion(s => s.Name, n => TenantConnectorStatus.FromName(n)!)
-            .HasMaxLength(50)
-            .IsRequired();
+            .HasConversion(s => s.Name, name => TenantConnectorStatus.FromName(name)!)
+            .HasMaxLength(50).IsRequired();
 
-        builder.Property(e => e.FailureReason)
-            .HasMaxLength(1000);
+        builder.Property(e => e.FailureReason).HasMaxLength(1000);
+        builder.Property(e => e.CredentialSecretNames).HasColumnType("text");
 
-        builder.Property(e => e.CredentialSecretNames)
-            .HasColumnType("text");
-
-        // One connector per tenant per name
         builder.HasIndex(e => e.TenantId);
-        builder.HasIndex(nameof(TenantConnector.TenantId), nameof(TenantConnector.ConnectorName))
-            .IsUnique();
+        builder.HasIndex(e => new { e.TenantId, e.ConnectorName }).IsUnique();
     }
 }

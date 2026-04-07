@@ -10,6 +10,7 @@ public sealed class ConnectorType : Enumeration<ConnectorType>
     public static readonly ConnectorType Teams = new(4, nameof(Teams));
     public static readonly ConnectorType SendGrid = new(5, nameof(SendGrid));
     public static readonly ConnectorType Custom = new(6, nameof(Custom));
+    public static readonly ConnectorType Apollo = new(7, nameof(Apollo));
 
     private ConnectorType(int id, string name) : base(id, name) { }
 }

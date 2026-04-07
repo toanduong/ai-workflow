@@ -14,6 +14,7 @@ namespace WorkflowAI.Infrastructure.Persistence.EntityFramework;
 
 public sealed class WorkflowAIDbContext(DbContextOptions<WorkflowAIDbContext> options) : DbContext(options)
 {
+    public DbSet<Workflow> Workflows => Set<Workflow>();
     public DbSet<User> Users => Set<User>();
     public DbSet<WorkflowTemplate> Templates => Set<WorkflowTemplate>();
     public DbSet<NotificationChannel> Channels => Set<NotificationChannel>();

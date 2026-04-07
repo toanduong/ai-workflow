@@ -12,10 +12,10 @@ public sealed class DeleteTenantConnectorFunction(IMediator mediator)
     public async Task<HttpResponseData> Run(
         [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "tenants/{tenantId}/connectors/{id}")]
         HttpRequestData req,
-        string tenantId,
-        string id)
+        Guid tenantId,
+        Guid id)
     {
-        var command = new DeleteTenantConnectorCommand(Guid.Parse(id));
+        var command = new DeleteTenantConnectorCommand(id);
         var result = await mediator.Send(command);
         return await req.CreateResultResponseAsync(result);
     }

@@ -13,20 +13,20 @@ public sealed class ProvisionTenantConnectorFunction(IMediator mediator)
     public async Task<HttpResponseData> Run(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "tenants/{tenantId}/connectors")]
         HttpRequestData req,
-        string tenantId)
+        Guid tenantId)
     {
         var body = await req.ReadFromJsonAsync<ProvisionTenantConnectorRequest>();
-        if (body is null || string.IsNullOrWhiteSpace(body.ConnectorName))
+        if (body is null)
         {
-            var bad = req.CreateResponse(HttpStatusCode.BadRequest);
-            await bad.WriteAsJsonAsync(new { Message = "connectorName is required." });
-            return bad;
+            var badRequest = req.CreateResponse(HttpStatusCode.BadRequest);
+            await badRequest.WriteAsJsonAsync(new { Message = "Invalid request body." });
+            return badRequest;
         }
 
-        var command = new ProvisionTenantConnectorCommand(Guid.Parse(tenantId), body.ConnectorName);
+        var command = new ProvisionTenantConnectorCommand(tenantId, body.ConnectorName);
         var result = await mediator.Send(command);
         return await req.CreateResultResponseAsync(result, HttpStatusCode.Created);
     }
-
-    private sealed record ProvisionTenantConnectorRequest(string ConnectorName);
 }
+
+public sealed record ProvisionTenantConnectorRequest(string ConnectorName);

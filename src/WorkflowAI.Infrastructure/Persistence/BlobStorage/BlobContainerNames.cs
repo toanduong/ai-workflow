@@ -1,7 +1,8 @@
-namespace WorkflowAI.Infrastructure.Persistence.Cosmos;
+namespace WorkflowAI.Infrastructure.Persistence.BlobStorage;
 
-public static class CosmosContainerNames
+internal static class BlobContainerNames
 {
+    public const string Workflows = "workflows";
     public const string Executions = "executions";
     public const string Approvals = "approvals";
     public const string Notifications = "notifications";

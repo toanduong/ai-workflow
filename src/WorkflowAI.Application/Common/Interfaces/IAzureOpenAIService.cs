@@ -6,6 +6,13 @@ public interface IAzureOpenAIService
     Task<AICompletionResult> CompleteWithToolsAsync(string prompt, string model, IReadOnlyList<AIToolDefinition> tools, CancellationToken cancellationToken = default);
 }
 
-public sealed record AICompletionResult(string Content, int TokensUsed, bool Success, string? ErrorMessage = null);
+public sealed record AICompletionResult(
+    string Content,
+    int TokensUsed,
+    bool Success,
+    string? ErrorMessage = null,
+    IReadOnlyList<AIToolCall>? ToolCalls = null);
 
 public sealed record AIToolDefinition(string Name, string Description, string ParametersJson);
+
+public sealed record AIToolCall(string ToolName, string InputJson);

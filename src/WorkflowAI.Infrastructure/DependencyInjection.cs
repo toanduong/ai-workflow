@@ -22,6 +22,7 @@ using WorkflowAI.Domain.TenantConnectors;
 using WorkflowAI.Domain.Users;
 using WorkflowAI.Domain.Workflows;
 using WorkflowAI.Infrastructure.AI;
+using WorkflowAI.Infrastructure.Connectors.Auth;
 using WorkflowAI.Infrastructure.Connectors;
 using WorkflowAI.Infrastructure.Identity;
 using WorkflowAI.Infrastructure.LogicApps;
@@ -102,6 +103,14 @@ public static class DependencyInjection
         // Services
         services.AddSingleton<IDateTimeProvider, DateTimeProvider>();
 
+        // Credential applicators (Strategy pattern)
+        services.AddScoped<ICredentialApplicator, ApiKeyCredentialApplicator>();
+        services.AddScoped<ICredentialApplicator, BearerCredentialApplicator>();
+        services.AddScoped<ICredentialApplicator, OAuth2CredentialApplicator>();
+        services.AddScoped<ICredentialApplicator, BasicCredentialApplicator>();
+        services.AddScoped<ICredentialApplicator, DefaultCredentialApplicator>();
+        services.AddScoped<ICredentialApplicatorFactory, CredentialApplicatorFactory>();
+
         // Connector services
         services.AddScoped<IConnectorRepository, SqlConnectorRepository>();
         services.AddScoped<IConnectorService, ConnectorService>();
@@ -124,6 +133,9 @@ public static class DependencyInjection
         {
             services.AddScoped<IKeyVaultService, NoOpKeyVaultService>();
         }
+
+        // HTTP client for ValidateTenantConnector
+        services.AddHttpClient<WorkflowAI.Application.TenantConnectors.Commands.ValidateTenantConnector.ValidateTenantConnectorCommandHandler>();
 
         // Logic App Generator + Deployer
         services.AddSingleton<StepToConnectorMapper>();
