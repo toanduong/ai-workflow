@@ -4,12 +4,15 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using NSubstitute;
 using System.Text.Json;
+using WorkflowAI.Application.Common.Interfaces;
 using WorkflowAI.Application.TenantConnectors.Commands.ProvisionTenantConnector;
 using WorkflowAI.Application.TenantConnectors.Commands.ValidateTenantConnector;
 using WorkflowAI.Domain.TenantConnectors;
 using WorkflowAI.Infrastructure.AI;
 using WorkflowAI.Infrastructure.Connectors;
+using WorkflowAI.Infrastructure.Connectors.Auth;
 using WorkflowAI.Infrastructure.Persistence.EntityFramework;
 using WorkflowAI.Infrastructure.Persistence.EntityFramework.Repositories;
 
@@ -256,36 +259,36 @@ public class OdooConnectorIntegrationTests : IAsyncLifetime
         var connectorId = provision.Value!.TenantConnectorId;
         _createdIds.Add(TenantConnectorId.From(connectorId));
 
-        // Step 2 — Validate: test real HTTP connection + Claude discovers API operations
-        // Credentials are passed as-is; the handler resolves baseUrl and auth key
-        // from whatever Claude generated in the metadata.
-        var httpValidator = new ConnectorHttpValidator(
-            new RealHttpClientFactory(),
-            NullLogger<ConnectorHttpValidator>.Instance);
+        // Step 2 — Validate: test real HTTP connection
+        // Credentials are passed as-is; the handler resolves baseUrl and auth from Claude-generated metadata.
+        ICredentialApplicatorFactory applicatorFactory = new CredentialApplicatorFactory(
+        [
+            new ApiKeyCredentialApplicator(),
+            new BearerCredentialApplicator(),
+            new OAuth2CredentialApplicator(),
+            new BasicCredentialApplicator(),
+            new DefaultCredentialApplicator()
+        ]);
+
+        var currentUser = Substitute.For<ICurrentUserService>();
+        currentUser.IsAuthenticated.Returns(true);
 
         var validateHandler = new ValidateTenantConnectorCommandHandler(
-            _repository, _anthropicService, httpValidator,
-            NullLogger<ValidateTenantConnectorCommandHandler>.Instance);
+            _repository, applicatorFactory, new NoOpKeyVaultService(), currentUser,
+            NullLogger<ValidateTenantConnectorCommandHandler>.Instance,
+            new HttpClient());
 
         var validate = await validateHandler.Handle(
             new ValidateTenantConnectorCommand(connectorId, credentials),
             CancellationToken.None);
 
         validate.IsSuccess.Should().BeTrue();
-        validate.Value!.IsValid.Should().BeTrue(
-            $"Connector credentials should be valid, but got: {validate.Value.FailureReason}");
-        validate.Value.ApiOperationsDiscovered.Should().BeGreaterThan(0,
-            "Claude should discover API operations for the connector");
+        validate.Value.Should().BeTrue(
+            "Connector credentials should be valid — check CONNECTOR_CREDENTIALS env var");
 
         // Assert Table 1 status = Active
         var connector = await _repository.GetByIdAsync(TenantConnectorId.From(connectorId));
         connector!.Status.Should().Be(TenantConnectorStatus.Active);
-
-        // Assert Table 2 — API operations saved
-        var apis = await _repository.GetApisByConnectorAsync(connector.Id);
-        apis.Should().NotBeEmpty();
-        apis.Should().OnlyContain(a => !string.IsNullOrEmpty(a.ApiName));
-        apis.Should().OnlyContain(a => !string.IsNullOrEmpty(a.HttpMethod));
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────

@@ -1,5 +1,6 @@
-using Anthropic;
+using Anthropic.SDK;
 using FluentAssertions;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -81,21 +82,21 @@ public class GenerateApolloConnectorAssetsTests
             .AddAsync(Arg.Do<WorkflowTemplate>(t => captured.Add(t)), Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
 
-        var claudeClient = new AnthropicClient(
-            new Anthropic.Core.ClientOptions { ApiKey = AnthropicApiKey });
-        var claudeOptions = Options.Create(new ClaudeAIOptions
+        IChatClient chatClient = new AnthropicClient(
+            apiKeys: new APIAuthentication(AnthropicApiKey)).Messages;
+        var anthropicOptions = Options.Create(new AnthropicOptions
         {
-            Model = "claude-opus-4-6",
-            MaxTokens = 16000
+            ApiKey = AnthropicApiKey,
+            DefaultModel = "claude-opus-4-6"
         });
-        var claudeService = new ClaudeAIService(
-            claudeClient, claudeOptions, NullLogger<ClaudeAIService>.Instance);
+        var anthropicService = new AnthropicService(
+            chatClient, anthropicOptions, NullLogger<AnthropicService>.Instance);
 
         var currentUser = Substitute.For<ICurrentUserService>();
         currentUser.IsAuthenticated.Returns(true);
 
         var handler = new GenerateConnectorAssetsCommandHandler(
-            repo, templateRepo, claudeService, currentUser,
+            repo, templateRepo, anthropicService, currentUser,
             NullLogger<GenerateConnectorAssetsCommandHandler>.Instance);
 
         return (handler, captured, connector.Id.Value);

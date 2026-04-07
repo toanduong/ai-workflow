@@ -1,12 +1,10 @@
+using Anthropic.SDK;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using NSubstitute;
 using System.Text.Json;
-using Anthropic;
-using WorkflowAI.Application.Common;
-using WorkflowAI.Application.Common.Interfaces;
 using WorkflowAI.Application.TenantConnectors.Commands.ProvisionTenantConnector;
 using WorkflowAI.Domain.TenantConnectors;
 using WorkflowAI.Infrastructure.AI;
@@ -64,24 +62,18 @@ public class ProvisionConnectorEndToEndTests : IAsyncLifetime
         _db = new WorkflowAIDbContext(options);
         _repository = new SqlTenantConnectorRepository(_db);
 
-        var claudeClient = new AnthropicClient(
-            new Anthropic.Core.ClientOptions { ApiKey = AnthropicApiKey });
-        var claudeOptions = Options.Create(new ClaudeAIOptions
+        IChatClient chatClient = new AnthropicClient(
+            apiKeys: new APIAuthentication(AnthropicApiKey)).Messages;
+        var anthropicOptions = Options.Create(new AnthropicOptions
         {
-            Model = "claude-opus-4-6",
-            MaxTokens = 16000
+            ApiKey = AnthropicApiKey,
+            DefaultModel = "claude-opus-4-6"
         });
-        var claudeService = new ClaudeAIService(
-            claudeClient, claudeOptions, NullLogger<ClaudeAIService>.Instance);
-
-        var currentUser = Substitute.For<ICurrentUserService>();
-        currentUser.IsAuthenticated.Returns(true);
-
-        var promptOptions = Options.Create(new ClaudePromptOptions());
+        var anthropicService = new AnthropicService(
+            chatClient, anthropicOptions, NullLogger<AnthropicService>.Instance);
 
         _handler = new ProvisionTenantConnectorCommandHandler(
-            _repository, claudeService, promptOptions, currentUser,
-            NullLogger<ProvisionTenantConnectorCommandHandler>.Instance);
+            _repository, anthropicService);
 
         return Task.CompletedTask;
     }

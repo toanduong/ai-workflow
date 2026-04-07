@@ -13,7 +13,7 @@ public class GenerateConnectorAssetsCommandHandlerTests
 {
     private readonly ITenantConnectorRepository _repository = Substitute.For<ITenantConnectorRepository>();
     private readonly ITemplateRepository _templateRepository = Substitute.For<ITemplateRepository>();
-    private readonly IClaudeAIService _claudeAIService = Substitute.For<IClaudeAIService>();
+    private readonly IAnthropicService _claudeAIService = Substitute.For<IAnthropicService>();
     private readonly ICurrentUserService _currentUserService = Substitute.For<ICurrentUserService>();
 
     public GenerateConnectorAssetsCommandHandlerTests()
@@ -51,6 +51,7 @@ public class GenerateConnectorAssetsCommandHandlerTests
         _claudeAIService.CompleteWithToolsAsync(
             Arg.Any<string>(),
             Arg.Any<IReadOnlyList<AIToolDefinition>>(),
+            Arg.Any<string?>(),
             Arg.Any<CancellationToken>())
             .Returns(new AICompletionResult(string.Empty, 800, true, ToolCalls: SampleToolCalls));
 
@@ -80,6 +81,7 @@ public class GenerateConnectorAssetsCommandHandlerTests
         _claudeAIService.CompleteWithToolsAsync(
             Arg.Any<string>(),
             Arg.Any<IReadOnlyList<AIToolDefinition>>(),
+            Arg.Any<string?>(),
             Arg.Any<CancellationToken>())
             .Returns(new AICompletionResult(string.Empty, 800, true, ToolCalls: SampleToolCalls));
 
@@ -113,6 +115,7 @@ public class GenerateConnectorAssetsCommandHandlerTests
         await _claudeAIService.DidNotReceive().CompleteWithToolsAsync(
             Arg.Any<string>(),
             Arg.Any<IReadOnlyList<AIToolDefinition>>(),
+            Arg.Any<string?>(),
             Arg.Any<CancellationToken>());
         await _templateRepository.DidNotReceive().AddAsync(
             Arg.Any<WorkflowTemplate>(), Arg.Any<CancellationToken>());
@@ -163,6 +166,7 @@ public class GenerateConnectorAssetsCommandHandlerTests
         _claudeAIService.CompleteWithToolsAsync(
             Arg.Any<string>(),
             Arg.Any<IReadOnlyList<AIToolDefinition>>(),
+            Arg.Any<string?>(),
             Arg.Any<CancellationToken>())
             .Returns(new AICompletionResult(string.Empty, 0, false, "Model overloaded"));
 

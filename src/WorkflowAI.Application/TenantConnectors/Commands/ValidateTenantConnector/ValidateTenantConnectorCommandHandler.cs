@@ -9,41 +9,19 @@ namespace WorkflowAI.Application.TenantConnectors.Commands.ValidateTenantConnect
 
 public sealed class ValidateTenantConnectorCommandHandler(
     ITenantConnectorRepository repository,
-    IAnthropicService anthropicService,
-    IConnectorHttpValidator httpValidator,
-    ILogger<ValidateTenantConnectorCommandHandler> logger)
-    : IRequestHandler<ValidateTenantConnectorCommand, Result<ValidateTenantConnectorResult>>
+    ICredentialApplicatorFactory applicatorFactory,
+    IKeyVaultService keyVaultService,
+    ICurrentUserService currentUserService,
+    ILogger<ValidateTenantConnectorCommandHandler> logger,
+    HttpClient httpClient)
+    : IRequestHandler<ValidateTenantConnectorCommand, Result<bool>>
 {
-    private const string ApiDiscoveryPromptTemplate = """
-        You are an API operations mapper for a workflow automation platform.
-        The connector "{connectorName}" is now validated and active at base URL: {baseUrl}
-        Auth type: {authType}
-
-        List all key API operations this service supports. For each operation return a JSON array entry:
-        {
-          "apiName": "resource/action",
-          "httpMethod": "GET | POST | PUT | DELETE | PATCH",
-          "urlTemplate": "{baseUrl}/path/to/resource",
-          "metadata": {
-            "headers": { "<appropriate-auth-header-for-authType>": "$secret" },
-            "requestMapping": { },
-            "responseMapping": { }
-          }
-        }
-
-        Use the correct auth header for the authType:
-          - APIKey  → "X-Api-Key": "$secret"
-          - Bearer  → "Authorization": "Bearer $secret"
-          - OAuth2  → "Authorization": "Bearer $secret"
-          - Basic   → "Authorization": "Basic $secret"
-
-        Focus on the most commonly used operations (up to 20).
-        Return ONLY a valid JSON array, no markdown, no extra text.
-        """;
-
-    public async Task<Result<ValidateTenantConnectorResult>> Handle(
+    public async Task<Result<bool>> Handle(
         ValidateTenantConnectorCommand request, CancellationToken ct)
     {
+        if (!currentUserService.IsAuthenticated)
+            return Error.Unauthorized("Auth.Required", "Authentication is required.");
+
         var connector = await repository.GetByIdAsync(
             TenantConnectorId.From(request.TenantConnectorId), ct);
 
@@ -51,31 +29,45 @@ public sealed class ValidateTenantConnectorCommandHandler(
             return Error.NotFound("TenantConnector.NotFound", "Connector not found.");
 
         var baseUrl = ResolveBaseUrl(connector.Metadata, request.Credentials);
-        var apiKey  = ResolveApiKey(request.Credentials);
-
         var (testUrl, testMethod) = ExtractTestEndpoint(connector.Metadata, baseUrl);
 
-        var (isValid, failureReason) = await httpValidator.TestAsync(testUrl, testMethod, apiKey, ct);
-
-        if (!isValid)
+        if (string.IsNullOrEmpty(testUrl))
         {
-            connector.MarkFailed(failureReason ?? "Connection test failed.");
+            connector.MarkFailed("Missing testEndpoint in connector metadata.");
             await repository.UpdateAsync(connector, ct);
-            return new ValidateTenantConnectorResult(false, 0, failureReason);
+            return false;
         }
 
+        var authType = ExtractAuthType(connector.Metadata);
+        var applicator = applicatorFactory.Resolve(authType);
+
+        HttpResponseMessage response;
+        try
+        {
+            var httpRequest = new HttpRequestMessage(new HttpMethod(testMethod), testUrl);
+            applicator.Apply(httpRequest, request.Credentials);
+            response = await httpClient.SendAsync(httpRequest, ct);
+        }
+        catch (HttpRequestException ex)
+        {
+            connector.MarkFailed(ex.Message);
+            await repository.UpdateAsync(connector, ct);
+            return false;
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            connector.MarkFailed($"HTTP {(int)response.StatusCode}");
+            await repository.UpdateAsync(connector, ct);
+            return false;
+        }
+
+        await StoreCredentialsAsync(connector, request.Credentials, ct);
         connector.Activate();
         await repository.UpdateAsync(connector, ct);
 
-        var apis = await DiscoverApiOperationsAsync(connector, baseUrl, ct);
-
-        if (apis.Count > 0)
-        {
-            await repository.DeleteApisByConnectorAsync(connector.Id, ct);
-            await repository.AddApisAsync(apis, ct);
-        }
-
-        return new ValidateTenantConnectorResult(true, apis.Count);
+        logger.LogInformation("Connector {ConnectorName} validated successfully", connector.ConnectorName);
+        return true;
     }
 
     /// <summary>
@@ -86,7 +78,6 @@ public sealed class ValidateTenantConnectorCommandHandler(
     ///   - Template    → "{instance_url}"               (self-hosted, differs per tenant)
     ///
     /// Template placeholders are substituted from the credentials dict at runtime.
-    /// This means code never needs to know which services are self-hosted.
     /// </summary>
     private static string ResolveBaseUrl(string metadata, IReadOnlyDictionary<string, string> credentials)
     {
@@ -97,7 +88,6 @@ public sealed class ValidateTenantConnectorCommandHandler(
             {
                 var baseUrl = bu.GetString() ?? string.Empty;
 
-                // Substitute any {placeholder} with the matching credential value
                 foreach (var (key, value) in credentials)
                     baseUrl = baseUrl.Replace($"{{{key}}}", value, StringComparison.OrdinalIgnoreCase);
 
@@ -108,25 +98,12 @@ public sealed class ValidateTenantConnectorCommandHandler(
         }
         catch (JsonException) { }
 
-        // Last resort: if any credential value is a URL (user passed it despite Claude not templating),
-        // use the first one — allows the system to still work with a non-ideal Claude response.
         return credentials.Values
             .FirstOrDefault(v =>
                 v.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
                 v.StartsWith("http://",  StringComparison.OrdinalIgnoreCase))
-            ?.TrimEnd('/')
-            ?? string.Empty;
+            ?.TrimEnd('/') ?? string.Empty;
     }
-
-    /// <summary>
-    /// Returns the first credential value that is not a URL — used as the authentication key/token.
-    /// The auth field name (api_key, access_token, etc.) is intentionally not hardcoded here;
-    /// it is determined by Claude's requiredFields and provided by the caller.
-    /// </summary>
-    private static string ResolveApiKey(IReadOnlyDictionary<string, string> credentials) =>
-        credentials.Values.FirstOrDefault(v =>
-            !v.StartsWith("https://", StringComparison.OrdinalIgnoreCase) &&
-            !v.StartsWith("http://",  StringComparison.OrdinalIgnoreCase)) ?? string.Empty;
 
     private static (string Url, string Method) ExtractTestEndpoint(string metadata, string baseUrl)
     {
@@ -138,33 +115,19 @@ public sealed class ValidateTenantConnectorCommandHandler(
                 var path   = ep.TryGetProperty("path",   out var p) ? p.GetString() : null;
                 var method = ep.TryGetProperty("method", out var m) ? m.GetString() : "GET";
 
-                if (!string.IsNullOrEmpty(path) && !string.IsNullOrEmpty(baseUrl))
-                    return ($"{baseUrl}{path}", method?.ToUpperInvariant() ?? "GET");
+                if (!string.IsNullOrEmpty(path))
+                {
+                    // path may be a full URL (e.g. Bearer/OAuth connectors) or a relative path
+                    var url = path.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+                        ? path
+                        : $"{baseUrl}{path}";
+                    return (url, method?.ToUpperInvariant() ?? "GET");
+                }
             }
         }
         catch (JsonException) { }
 
-        // Last resort: probe the base URL directly
         return (baseUrl, "GET");
-    }
-
-    private async Task<List<TenantConnectorApi>> DiscoverApiOperationsAsync(
-        TenantConnector connector, string baseUrl, CancellationToken ct)
-    {
-        var authType = ExtractAuthType(connector.Metadata);
-        var prompt = ApiDiscoveryPromptTemplate
-            .Replace("{connectorName}", connector.ConnectorName)
-            .Replace("{baseUrl}", baseUrl)
-            .Replace("{authType}", authType);
-
-        var aiResult = await anthropicService.CompleteAsync(prompt, cancellationToken: ct);
-        if (!aiResult.Success)
-        {
-            logger.LogWarning("Claude API discovery failed for {Connector}", connector.ConnectorName);
-            return [];
-        }
-
-        return ParseApiOperations(connector, aiResult.Content);
     }
 
     private static string ExtractAuthType(string metadata)
@@ -179,43 +142,25 @@ public sealed class ValidateTenantConnectorCommandHandler(
         return "APIKey";
     }
 
-    private static string StripMarkdownFences(string content)
+    private async Task StoreCredentialsAsync(
+        TenantConnector connector,
+        IReadOnlyDictionary<string, string> credentials,
+        CancellationToken ct)
     {
-        if (content.StartsWith("```"))
+        var secretNames = new Dictionary<string, string>();
+        foreach (var (field, value) in credentials)
         {
-            var firstNewline = content.IndexOf('\n');
-            var lastFence = content.LastIndexOf("```");
-            if (firstNewline > 0 && lastFence > firstNewline)
-                return content[(firstNewline + 1)..lastFence].Trim();
-        }
-        return content;
-    }
-
-    private static List<TenantConnectorApi> ParseApiOperations(TenantConnector connector, string content)
-    {
-        var apis = new List<TenantConnectorApi>();
-        try
-        {
-            var array = JsonDocument.Parse(StripMarkdownFences(content.Trim())).RootElement;
-            if (array.ValueKind != JsonValueKind.Array) return apis;
-
-            foreach (var item in array.EnumerateArray())
+            try
             {
-                var apiName    = item.TryGetProperty("apiName",    out var n) ? n.GetString() : null;
-                var httpMethod = item.TryGetProperty("httpMethod",  out var m) ? m.GetString() : null;
-                var urlTpl     = item.TryGetProperty("urlTemplate", out var u) ? u.GetString() : null;
-                var meta       = item.TryGetProperty("metadata",    out var d) ? d.GetRawText() : "{}";
-
-                if (string.IsNullOrEmpty(apiName) || string.IsNullOrEmpty(httpMethod) || string.IsNullOrEmpty(urlTpl))
-                    continue;
-
-                apis.Add(TenantConnectorApi.Create(
-                    connector.Id, connector.TenantId, connector.ConnectorName,
-                    apiName, httpMethod, urlTpl, meta));
+                var secretName = $"connector-{connector.Id.Value}-{field}";
+                var (storedName, _) = await keyVaultService.SetSecretAsync(secretName, value, ct: ct);
+                secretNames[field] = storedName;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to store credential {Field} in Key Vault for connector {Id}",
+                    field, connector.Id.Value);
             }
         }
-        catch (JsonException) { }
-
-        return apis;
     }
 }

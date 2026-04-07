@@ -12,15 +12,15 @@ using WorkflowAI.Infrastructure.Persistence.EntityFramework;
 namespace WorkflowAI.Infrastructure.Migrations
 {
     [DbContext(typeof(WorkflowAIDbContext))]
-    [Migration("20260407041840_RemoveApolloEvents")]
-    partial class RemoveApolloEvents
+    [Migration("20260407100605_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "9.0.5")
+                .HasAnnotation("ProductVersion", "10.0.5")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -524,6 +524,57 @@ namespace WorkflowAI.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("TenantConnectors", (string)null);
+                });
+
+            modelBuilder.Entity("WorkflowAI.Domain.TenantConnectors.TenantConnectorApi", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ApiName")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("ConnectorName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("HttpMethod")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("Metadata")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("TenantConnectorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UrlTemplate")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantConnectorId");
+
+                    b.HasIndex("TenantConnectorId", "ApiName")
+                        .IsUnique();
+
+                    b.ToTable("TenantConnectorApis", (string)null);
                 });
 
             modelBuilder.Entity("WorkflowAI.Domain.Users.User", b =>

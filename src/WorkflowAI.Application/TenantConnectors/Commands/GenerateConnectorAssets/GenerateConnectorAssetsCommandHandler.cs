@@ -11,7 +11,7 @@ namespace WorkflowAI.Application.TenantConnectors.Commands.GenerateConnectorAsse
 public sealed class GenerateConnectorAssetsCommandHandler(
     ITenantConnectorRepository repository,
     ITemplateRepository templateRepository,
-    IClaudeAIService claudeAIService,
+    IAnthropicService claudeAIService,
     ICurrentUserService currentUserService,
     ILogger<GenerateConnectorAssetsCommandHandler> logger)
     : IRequestHandler<GenerateConnectorAssetsCommand, Result<GenerateConnectorAssetsResult>>
@@ -64,7 +64,7 @@ public sealed class GenerateConnectorAssetsCommandHandler(
             Generate at least 3 API routes and 2 workflow templates that would be useful for this connector.
             """;
 
-        var aiResult = await claudeAIService.CompleteWithToolsAsync(prompt, tools, cancellationToken);
+        var aiResult = await claudeAIService.CompleteWithToolsAsync(prompt, tools, cancellationToken: cancellationToken);
 
         if (!aiResult.Success)
         {

@@ -7,7 +7,7 @@ namespace WorkflowAI.Application.AIAgent.Commands.ExecuteAIStep;
 
 public sealed class ExecuteAIStepCommandHandler(
     IAIAgentTaskRepository taskRepository,
-    IClaudeAIService claudeService)
+    IAnthropicService claudeService)
     : IRequestHandler<ExecuteAIStepCommand, Result>
 {
     public async Task<Result> Handle(ExecuteAIStepCommand request, CancellationToken ct)
@@ -17,7 +17,7 @@ public sealed class ExecuteAIStepCommandHandler(
         task.StartProcessing();
         await taskRepository.AddAsync(task, ct);
 
-        var response = await claudeService.CompleteAsync(prompt, ct);
+        var response = await claudeService.CompleteAsync(prompt, cancellationToken: ct);
 
         if (response.Success)
             task.Complete(response.Content, response.TokensUsed);
