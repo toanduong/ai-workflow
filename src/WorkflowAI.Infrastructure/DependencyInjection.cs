@@ -1,12 +1,15 @@
+using Anthropic.SDK;
 using Azure.Communication.Email;
 using Azure.Identity;
 using Azure.Messaging.ServiceBus;
 using Azure.ResourceManager;
+using Microsoft.Extensions.AI;
 using Azure.Security.KeyVault.Secrets;
 using Azure.Storage.Blobs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using WorkflowAI.Application.Common.Interfaces;
 using WorkflowAI.Domain.AIAgent;
 using WorkflowAI.Domain.Approvals;
@@ -15,6 +18,7 @@ using WorkflowAI.Domain.Connectors;
 using WorkflowAI.Domain.Executions;
 using WorkflowAI.Domain.Notifications;
 using WorkflowAI.Domain.Templates;
+using WorkflowAI.Domain.TenantConnectors;
 using WorkflowAI.Domain.Users;
 using WorkflowAI.Domain.Workflows;
 using WorkflowAI.Infrastructure.AI;
@@ -67,6 +71,15 @@ public static class DependencyInjection
         services.Configure<AzureOpenAIOptions>(configuration.GetSection(AzureOpenAIOptions.SectionName));
         services.AddScoped<IAzureOpenAIService, AzureOpenAIService>();
 
+        // Anthropic Claude
+        services.Configure<AnthropicOptions>(configuration.GetSection(AnthropicOptions.SectionName));
+        services.AddSingleton<IChatClient>(sp =>
+        {
+            var opts = sp.GetRequiredService<IOptions<AnthropicOptions>>().Value;
+            return new AnthropicClient(apiKeys: new APIAuthentication(opts.ApiKey)).Messages;
+        });
+        services.AddScoped<IAnthropicService, AnthropicService>();
+
         // Notification Adapters
         services.AddHttpClient<SlackNotificationAdapter>();
         services.AddHttpClient<TeamsNotificationAdapter>();
@@ -94,6 +107,8 @@ public static class DependencyInjection
         services.AddScoped<IConnectorService, ConnectorService>();
         services.AddScoped<IApiConnectionProvisioner, ApiConnectionProvisioner>();
         services.AddScoped<IConnectorCredentialResolver, ConnectorCredentialResolver>();
+        services.AddScoped<ITenantConnectorRepository, SqlTenantConnectorRepository>();
+        services.AddScoped<IConnectorHttpValidator, ConnectorHttpValidator>();
 
         // HTTP client for HttpStep execution
         services.AddHttpClient<WorkflowAI.Application.Executions.Commands.ExecuteHttpStep.ExecuteHttpStepCommandHandler>();

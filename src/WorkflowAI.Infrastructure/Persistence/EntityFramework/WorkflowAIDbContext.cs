@@ -6,6 +6,7 @@ using WorkflowAI.Domain.Connectors;
 using WorkflowAI.Domain.Executions;
 using WorkflowAI.Domain.Notifications;
 using WorkflowAI.Domain.Templates;
+using WorkflowAI.Domain.TenantConnectors;
 using WorkflowAI.Domain.Users;
 using WorkflowAI.Domain.Workflows;
 
@@ -24,6 +25,8 @@ public sealed class WorkflowAIDbContext(DbContextOptions<WorkflowAIDbContext> op
     public DbSet<ApprovalAction> ApprovalActions => Set<ApprovalAction>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<AIAgentTask> AIAgentTasks => Set<AIAgentTask>();
+    public DbSet<TenantConnector> TenantConnectors => Set<TenantConnector>();
+    public DbSet<TenantConnectorApi> TenantConnectorApis => Set<TenantConnectorApi>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
