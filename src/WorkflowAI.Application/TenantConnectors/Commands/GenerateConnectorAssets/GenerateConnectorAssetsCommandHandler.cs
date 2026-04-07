@@ -6,18 +6,18 @@ using WorkflowAI.Domain.Common;
 using WorkflowAI.Domain.Templates;
 using WorkflowAI.Domain.TenantConnectors;
 
-namespace WorkflowAI.Application.TenantConnectors.Commands.GenerateMcpWorkflows;
+namespace WorkflowAI.Application.TenantConnectors.Commands.GenerateConnectorAssets;
 
-public sealed class GenerateMcpWorkflowsCommandHandler(
+public sealed class GenerateConnectorAssetsCommandHandler(
     ITenantConnectorRepository repository,
     ITemplateRepository templateRepository,
     IClaudeAIService claudeAIService,
     ICurrentUserService currentUserService,
-    ILogger<GenerateMcpWorkflowsCommandHandler> logger)
-    : IRequestHandler<GenerateMcpWorkflowsCommand, Result<GenerateMcpWorkflowsResult>>
+    ILogger<GenerateConnectorAssetsCommandHandler> logger)
+    : IRequestHandler<GenerateConnectorAssetsCommand, Result<GenerateConnectorAssetsResult>>
 {
-    public async Task<Result<GenerateMcpWorkflowsResult>> Handle(
-        GenerateMcpWorkflowsCommand request, CancellationToken cancellationToken)
+    public async Task<Result<GenerateConnectorAssetsResult>> Handle(
+        GenerateConnectorAssetsCommand request, CancellationToken cancellationToken)
     {
         if (!currentUserService.IsAuthenticated)
             return Error.Unauthorized("Auth.Required", "User must be authenticated.");
@@ -31,9 +31,9 @@ public sealed class GenerateMcpWorkflowsCommandHandler(
 
         if (connector.Status != TenantConnectorStatus.Active)
             return Error.Validation("TenantConnector.NotActive",
-                $"Connector must be Active before generating workflows. Current status: {connector.Status.Name}");
+                $"Connector must be Active before generating assets. Current status: {connector.Status.Name}");
 
-        logger.LogInformation("Generating workflows for connector {ConnectorId} ({ConnectorName})",
+        logger.LogInformation("Generating connector assets for {ConnectorId} ({ConnectorName})",
             request.TenantConnectorId, connector.ConnectorName);
 
         var tools = new[]
@@ -68,10 +68,10 @@ public sealed class GenerateMcpWorkflowsCommandHandler(
 
         if (!aiResult.Success)
         {
-            logger.LogError("Claude failed to generate workflows for connector {ConnectorId}: {Error}",
+            logger.LogError("Claude failed to generate assets for connector {ConnectorId}: {Error}",
                 request.TenantConnectorId, aiResult.ErrorMessage);
-            return Error.Unexpected("TenantConnector.WorkflowGenerationFailed",
-                aiResult.ErrorMessage ?? "Claude failed to generate workflows.");
+            return Error.Unexpected("TenantConnector.AssetGenerationFailed",
+                aiResult.ErrorMessage ?? "Claude failed to generate connector assets.");
         }
 
         var toolCalls = aiResult.ToolCalls ?? [];
@@ -116,7 +116,8 @@ public sealed class GenerateMcpWorkflowsCommandHandler(
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Skipping malformed API route JSON for connector {ConnectorId}", request.TenantConnectorId);
+                logger.LogWarning(ex, "Skipping malformed API route JSON for connector {ConnectorId}",
+                    request.TenantConnectorId);
             }
         }
 
@@ -139,11 +140,12 @@ public sealed class GenerateMcpWorkflowsCommandHandler(
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Skipping malformed workflow template JSON for connector {ConnectorId}", request.TenantConnectorId);
+                logger.LogWarning(ex, "Skipping malformed workflow template JSON for connector {ConnectorId}",
+                    request.TenantConnectorId);
             }
         }
 
-        return new GenerateMcpWorkflowsResult(
+        return new GenerateConnectorAssetsResult(
             JsonSerializer.Serialize(apiRoutes),
             JsonSerializer.Serialize(workflowTemplates));
     }

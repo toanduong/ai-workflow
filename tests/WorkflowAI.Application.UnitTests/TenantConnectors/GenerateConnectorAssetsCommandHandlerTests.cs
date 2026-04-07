@@ -2,21 +2,21 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using WorkflowAI.Application.Common.Interfaces;
-using WorkflowAI.Application.TenantConnectors.Commands.GenerateMcpWorkflows;
+using WorkflowAI.Application.TenantConnectors.Commands.GenerateConnectorAssets;
 using WorkflowAI.Application.UnitTests.Common.Builders;
 using WorkflowAI.Domain.Templates;
 using WorkflowAI.Domain.TenantConnectors;
 
 namespace WorkflowAI.Application.UnitTests.TenantConnectors;
 
-public class GenerateMcpWorkflowsCommandHandlerTests
+public class GenerateConnectorAssetsCommandHandlerTests
 {
     private readonly ITenantConnectorRepository _repository = Substitute.For<ITenantConnectorRepository>();
     private readonly ITemplateRepository _templateRepository = Substitute.For<ITemplateRepository>();
     private readonly IClaudeAIService _claudeAIService = Substitute.For<IClaudeAIService>();
     private readonly ICurrentUserService _currentUserService = Substitute.For<ICurrentUserService>();
 
-    public GenerateMcpWorkflowsCommandHandlerTests()
+    public GenerateConnectorAssetsCommandHandlerTests()
     {
         _currentUserService.IsAuthenticated.Returns(true);
     }
@@ -30,12 +30,12 @@ public class GenerateMcpWorkflowsCommandHandlerTests
         new AIToolCall("create_workflow_template", """{"name":"Apollo Sequence Trigger","trigger":"schedule","steps":[],"description":"Trigger Apollo sequences"}""")
     };
 
-    private GenerateMcpWorkflowsCommandHandler CreateHandler() =>
+    private GenerateConnectorAssetsCommandHandler CreateHandler() =>
         new(_repository,
             _templateRepository,
             _claudeAIService,
             _currentUserService,
-            NullLogger<GenerateMcpWorkflowsCommandHandler>.Instance);
+            NullLogger<GenerateConnectorAssetsCommandHandler>.Instance);
 
     [Fact]
     public async Task Handle_ActiveApolloConnector_ReturnsApiRoutesAndWorkflows()
@@ -54,7 +54,7 @@ public class GenerateMcpWorkflowsCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(new AICompletionResult(string.Empty, 800, true, ToolCalls: SampleToolCalls));
 
-        var command = new GenerateMcpWorkflowsCommand(connector.Id.Value);
+        var command = new GenerateConnectorAssetsCommand(connector.Id.Value);
         var result = await CreateHandler().Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -83,7 +83,7 @@ public class GenerateMcpWorkflowsCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(new AICompletionResult(string.Empty, 800, true, ToolCalls: SampleToolCalls));
 
-        var command = new GenerateMcpWorkflowsCommand(connector.Id.Value);
+        var command = new GenerateConnectorAssetsCommand(connector.Id.Value);
         await CreateHandler().Handle(command, CancellationToken.None);
 
         await _templateRepository.Received(3).AddAsync(
@@ -105,7 +105,7 @@ public class GenerateMcpWorkflowsCommandHandlerTests
         _repository.GetByIdAsync(connector.Id, Arg.Any<CancellationToken>())
             .Returns(connector);
 
-        var command = new GenerateMcpWorkflowsCommand(connector.Id.Value);
+        var command = new GenerateConnectorAssetsCommand(connector.Id.Value);
         var result = await CreateHandler().Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
@@ -129,7 +129,7 @@ public class GenerateMcpWorkflowsCommandHandlerTests
         _repository.GetByIdAsync(connector.Id, Arg.Any<CancellationToken>())
             .Returns(connector);
 
-        var command = new GenerateMcpWorkflowsCommand(connector.Id.Value);
+        var command = new GenerateConnectorAssetsCommand(connector.Id.Value);
         var result = await CreateHandler().Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
@@ -142,7 +142,7 @@ public class GenerateMcpWorkflowsCommandHandlerTests
         _repository.GetByIdAsync(Arg.Any<TenantConnectorId>(), Arg.Any<CancellationToken>())
             .Returns((TenantConnector?)null);
 
-        var command = new GenerateMcpWorkflowsCommand(Guid.NewGuid());
+        var command = new GenerateConnectorAssetsCommand(Guid.NewGuid());
         var result = await CreateHandler().Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
@@ -166,11 +166,11 @@ public class GenerateMcpWorkflowsCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(new AICompletionResult(string.Empty, 0, false, "Model overloaded"));
 
-        var command = new GenerateMcpWorkflowsCommand(connector.Id.Value);
+        var command = new GenerateConnectorAssetsCommand(connector.Id.Value);
         var result = await CreateHandler().Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error!.Code.Should().Be("TenantConnector.WorkflowGenerationFailed");
+        result.Error!.Code.Should().Be("TenantConnector.AssetGenerationFailed");
         await _templateRepository.DidNotReceive().AddAsync(
             Arg.Any<WorkflowTemplate>(), Arg.Any<CancellationToken>());
     }

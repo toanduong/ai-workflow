@@ -5,7 +5,7 @@ using Microsoft.Extensions.Options;
 using NSubstitute;
 using System.Text.Json;
 using WorkflowAI.Application.Common.Interfaces;
-using WorkflowAI.Application.TenantConnectors.Commands.GenerateMcpWorkflows;
+using WorkflowAI.Application.TenantConnectors.Commands.GenerateConnectorAssets;
 using WorkflowAI.Domain.Templates;
 using WorkflowAI.Domain.TenantConnectors;
 using WorkflowAI.Infrastructure.AI;
@@ -24,7 +24,7 @@ namespace WorkflowAI.Infrastructure.IntegrationTests.TenantConnectors;
 /// Each test calls Claude independently so they can be run in any order.
 /// </summary>
 [Trait("Category", "Integration")]
-public class GenerateApolloWorkflowsTests
+public class GenerateApolloConnectorAssetsTests
 {
     private static readonly string AnthropicApiKey =
         Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY")
@@ -65,7 +65,7 @@ public class GenerateApolloWorkflowsTests
     /// Creates a fresh handler + capturing template list for each test.
     /// Returns both so the test can inspect what was saved.
     /// </summary>
-    private (GenerateMcpWorkflowsCommandHandler handler, List<WorkflowTemplate> captured, Guid connectorId)
+    private (GenerateConnectorAssetsCommandHandler handler, List<WorkflowTemplate> captured, Guid connectorId)
         CreateHandlerWithCapture()
     {
         var connector = TenantConnector.Create(TenantId.New(), "Apollo");
@@ -94,9 +94,9 @@ public class GenerateApolloWorkflowsTests
         var currentUser = Substitute.For<ICurrentUserService>();
         currentUser.IsAuthenticated.Returns(true);
 
-        var handler = new GenerateMcpWorkflowsCommandHandler(
+        var handler = new GenerateConnectorAssetsCommandHandler(
             repo, templateRepo, claudeService, currentUser,
-            NullLogger<GenerateMcpWorkflowsCommandHandler>.Instance);
+            NullLogger<GenerateConnectorAssetsCommandHandler>.Instance);
 
         return (handler, captured, connector.Id.Value);
     }
@@ -104,12 +104,12 @@ public class GenerateApolloWorkflowsTests
     // ── Test 1: overall success ───────────────────────────────────────────────
 
     [Fact]
-    public async Task GenerateMcpWorkflows_ForApollo_ReturnsSuccessResult()
+    public async Task GenerateConnectorAssets_ForApollo_ReturnsSuccessResult()
     {
         var (handler, _, connectorId) = CreateHandlerWithCapture();
 
         var result = await handler.Handle(
-            new GenerateMcpWorkflowsCommand(connectorId), CancellationToken.None);
+            new GenerateConnectorAssetsCommand(connectorId), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue(
             "Claude should successfully generate routes and workflows for Apollo");
@@ -122,12 +122,12 @@ public class GenerateApolloWorkflowsTests
     // ── Test 2: minimum 3 API routes ─────────────────────────────────────────
 
     [Fact]
-    public async Task GenerateMcpWorkflows_ForApollo_SavesAtLeastThreeApiRoutes()
+    public async Task GenerateConnectorAssets_ForApollo_SavesAtLeastThreeApiRoutes()
     {
         var (handler, captured, connectorId) = CreateHandlerWithCapture();
 
         await handler.Handle(
-            new GenerateMcpWorkflowsCommand(connectorId), CancellationToken.None);
+            new GenerateConnectorAssetsCommand(connectorId), CancellationToken.None);
 
         captured.Where(t => t.Category == "Apollo/ApiRoute")
             .Should().HaveCountGreaterThanOrEqualTo(3,
@@ -137,12 +137,12 @@ public class GenerateApolloWorkflowsTests
     // ── Test 3: minimum 2 workflow templates ─────────────────────────────────
 
     [Fact]
-    public async Task GenerateMcpWorkflows_ForApollo_SavesAtLeastTwoWorkflowTemplates()
+    public async Task GenerateConnectorAssets_ForApollo_SavesAtLeastTwoWorkflowTemplates()
     {
         var (handler, captured, connectorId) = CreateHandlerWithCapture();
 
         await handler.Handle(
-            new GenerateMcpWorkflowsCommand(connectorId), CancellationToken.None);
+            new GenerateConnectorAssetsCommand(connectorId), CancellationToken.None);
 
         captured.Where(t => t.Category == "Apollo/Workflow")
             .Should().HaveCountGreaterThanOrEqualTo(2,
@@ -152,12 +152,12 @@ public class GenerateApolloWorkflowsTests
     // ── Test 4: API route structure ───────────────────────────────────────────
 
     [Fact]
-    public async Task GenerateMcpWorkflows_ForApollo_ApiRoutesHaveValidStructure()
+    public async Task GenerateConnectorAssets_ForApollo_ApiRoutesHaveValidStructure()
     {
         var (handler, captured, connectorId) = CreateHandlerWithCapture();
 
         await handler.Handle(
-            new GenerateMcpWorkflowsCommand(connectorId), CancellationToken.None);
+            new GenerateConnectorAssetsCommand(connectorId), CancellationToken.None);
 
         var apiRoutes = captured.Where(t => t.Category == "Apollo/ApiRoute").ToList();
         apiRoutes.Should().NotBeEmpty();
@@ -181,12 +181,12 @@ public class GenerateApolloWorkflowsTests
     // ── Test 5: workflow template structure ───────────────────────────────────
 
     [Fact]
-    public async Task GenerateMcpWorkflows_ForApollo_WorkflowTemplatesHaveValidStructure()
+    public async Task GenerateConnectorAssets_ForApollo_WorkflowTemplatesHaveValidStructure()
     {
         var (handler, captured, connectorId) = CreateHandlerWithCapture();
 
         await handler.Handle(
-            new GenerateMcpWorkflowsCommand(connectorId), CancellationToken.None);
+            new GenerateConnectorAssetsCommand(connectorId), CancellationToken.None);
 
         var workflows = captured.Where(t => t.Category == "Apollo/Workflow").ToList();
         workflows.Should().NotBeEmpty();
@@ -206,12 +206,12 @@ public class GenerateApolloWorkflowsTests
     // ── Test 6: Apollo-relevant content ──────────────────────────────────────
 
     [Fact]
-    public async Task GenerateMcpWorkflows_ForApollo_GeneratesApolloRelevantRoutes()
+    public async Task GenerateConnectorAssets_ForApollo_GeneratesApolloRelevantRoutes()
     {
         var (handler, captured, connectorId) = CreateHandlerWithCapture();
 
         await handler.Handle(
-            new GenerateMcpWorkflowsCommand(connectorId), CancellationToken.None);
+            new GenerateConnectorAssetsCommand(connectorId), CancellationToken.None);
 
         var allNames = captured.Select(t => t.Name).ToList();
 
