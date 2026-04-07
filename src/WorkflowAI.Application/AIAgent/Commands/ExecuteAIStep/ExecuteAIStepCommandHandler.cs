@@ -7,17 +7,17 @@ namespace WorkflowAI.Application.AIAgent.Commands.ExecuteAIStep;
 
 public sealed class ExecuteAIStepCommandHandler(
     IAIAgentTaskRepository taskRepository,
-    IAzureOpenAIService openAIService)
+    IClaudeAIService claudeService)
     : IRequestHandler<ExecuteAIStepCommand, Result>
 {
     public async Task<Result> Handle(ExecuteAIStepCommand request, CancellationToken ct)
     {
         var prompt = request.Configuration ?? "";
-        var task = AIAgentTask.Create(request.StepExecutionId, prompt, null, "gpt-4o");
+        var task = AIAgentTask.Create(request.StepExecutionId, prompt, null, "claude-opus-4-6");
         task.StartProcessing();
         await taskRepository.AddAsync(task, ct);
 
-        var response = await openAIService.CompleteAsync(prompt, "gpt-4o", ct);
+        var response = await claudeService.CompleteAsync(prompt, ct);
 
         if (response.Success)
             task.Complete(response.Content, response.TokensUsed);

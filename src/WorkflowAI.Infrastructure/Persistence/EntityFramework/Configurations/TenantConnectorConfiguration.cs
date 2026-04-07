@@ -28,6 +28,7 @@ public sealed class TenantConnectorConfiguration : IEntityTypeConfiguration<Tena
             .HasMaxLength(50).IsRequired();
 
         builder.Property(e => e.FailureReason).HasMaxLength(1000);
+        builder.Property(e => e.CredentialSecretNames).HasColumnType("text");
 
         builder.HasIndex(e => e.TenantId);
         builder.HasIndex(e => new { e.TenantId, e.ConnectorName }).IsUnique();

@@ -6,7 +6,13 @@ public sealed class ProvisionTenantConnectorCommandValidator : AbstractValidator
 {
     public ProvisionTenantConnectorCommandValidator()
     {
-        RuleFor(x => x.TenantId).NotEmpty();
-        RuleFor(x => x.ConnectorName).NotEmpty().MaximumLength(200);
+        RuleFor(x => x.TenantId)
+            .NotEmpty()
+            .Must(id => id != Guid.Empty)
+            .WithMessage("TenantId must not be empty.");
+        RuleFor(x => x.ConnectorName)
+            .NotEmpty()
+            .MinimumLength(2)
+            .MaximumLength(200);
     }
 }

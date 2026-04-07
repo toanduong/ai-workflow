@@ -1,5 +1,8 @@
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NSubstitute;
+using WorkflowAI.Application.Common;
 using WorkflowAI.Application.Common.Interfaces;
 using WorkflowAI.Application.TenantConnectors.Commands.ProvisionTenantConnector;
 using WorkflowAI.Domain.TenantConnectors;
@@ -10,6 +13,12 @@ public class ProvisionTenantConnectorCommandHandlerTests
 {
     private readonly ITenantConnectorRepository _repository = Substitute.For<ITenantConnectorRepository>();
     private readonly IClaudeAIService _claudeAIService = Substitute.For<IClaudeAIService>();
+    private readonly ICurrentUserService _currentUserService = Substitute.For<ICurrentUserService>();
+
+    public ProvisionTenantConnectorCommandHandlerTests()
+    {
+        _currentUserService.IsAuthenticated.Returns(true);
+    }
 
     private static readonly string ValidClaudeResponse = """
         {
@@ -31,7 +40,11 @@ public class ProvisionTenantConnectorCommandHandlerTests
         """;
 
     private ProvisionTenantConnectorCommandHandler CreateHandler() =>
-        new(_repository, _claudeAIService);
+        new(_repository,
+            _claudeAIService,
+            Options.Create(new ClaudePromptOptions()),
+            _currentUserService,
+            NullLogger<ProvisionTenantConnectorCommandHandler>.Instance);
 
     [Fact]
     public async Task Handle_NewApolloConnector_ReturnsMataAndInfo()

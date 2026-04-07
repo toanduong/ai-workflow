@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using WorkflowAI.Application.Common.Interfaces;
 using WorkflowAI.Application.TenantConnectors.Commands.GenerateMcpWorkflows;
@@ -13,6 +14,12 @@ public class GenerateMcpWorkflowsCommandHandlerTests
     private readonly ITenantConnectorRepository _repository = Substitute.For<ITenantConnectorRepository>();
     private readonly ITemplateRepository _templateRepository = Substitute.For<ITemplateRepository>();
     private readonly IClaudeAIService _claudeAIService = Substitute.For<IClaudeAIService>();
+    private readonly ICurrentUserService _currentUserService = Substitute.For<ICurrentUserService>();
+
+    public GenerateMcpWorkflowsCommandHandlerTests()
+    {
+        _currentUserService.IsAuthenticated.Returns(true);
+    }
 
     private static readonly IReadOnlyList<AIToolCall> SampleToolCalls = new[]
     {
@@ -24,7 +31,11 @@ public class GenerateMcpWorkflowsCommandHandlerTests
     };
 
     private GenerateMcpWorkflowsCommandHandler CreateHandler() =>
-        new(_repository, _templateRepository, _claudeAIService);
+        new(_repository,
+            _templateRepository,
+            _claudeAIService,
+            _currentUserService,
+            NullLogger<GenerateMcpWorkflowsCommandHandler>.Instance);
 
     [Fact]
     public async Task Handle_ActiveApolloConnector_ReturnsApiRoutesAndWorkflows()

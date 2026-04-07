@@ -7,11 +7,14 @@ namespace WorkflowAI.Infrastructure.IntegrationTests.TenantConnectors;
 
 /// <summary>
 /// Real integration tests that hit the live Apollo.io API.
-/// Requires a valid Apollo API key set in APOLLO_API_KEY env var or hardcoded for dev.
+/// Requires a valid Apollo API key set in the APOLLO_API_KEY environment variable.
 /// </summary>
+[Trait("Category", "Integration")]
 public class ApolloConnectionTests
 {
-    private const string ApolloApiKey = "2KnDUjWTvMGew6imUVTACw";
+    private static readonly string ApolloApiKey =
+        Environment.GetEnvironmentVariable("APOLLO_API_KEY")
+        ?? throw new InvalidOperationException("APOLLO_API_KEY environment variable is not set.");
     private const string ApolloBaseUrl = "https://api.apollo.io/v1";
 
     private static HttpClient CreateClient()

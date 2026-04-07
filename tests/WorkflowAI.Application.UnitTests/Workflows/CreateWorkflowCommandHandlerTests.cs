@@ -85,8 +85,8 @@ public class CreateWorkflowCommandHandlerTests
         var handler = CreateHandler();
         var steps = new List<CreateWorkflowStepDto>
         {
-            new("Step 1", "AIAgent", null, null, 60, null),
-            new("Step 2", "HumanApproval", null, "Admin", 120, "Escalate")
+            new("Step 1", "AIAgent", null, null, null, 60),
+            new("Step 2", "HumanApproval", null, null, "Admin", 120, "Escalate")
         };
         var command = new CreateWorkflowCommand("Workflow", null, null, steps);
 
@@ -105,7 +105,7 @@ public class CreateWorkflowCommandHandlerTests
         var handler = CreateHandler();
         var steps = new List<CreateWorkflowStepDto>
         {
-            new("Step 1", "InvalidType", null, null, 60, null)
+            new("Step 1", "InvalidType", null, null, null, 60)
         };
         var command = new CreateWorkflowCommand("Workflow", null, null, steps);
 

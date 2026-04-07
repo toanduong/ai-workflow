@@ -45,7 +45,7 @@ public class ExecuteHttpStepCommandHandlerTests
         ConnectorId? connectorId = null)
     {
         var workflow = Workflow.Create("Test", null, UserId.New());
-        workflow.AddStep("Step1", StepType.Notification, stepUrl);
+        workflow.AddStep("Step1", StepType.Notification, configuration: stepUrl);
         var step = workflow.Steps[0];
         if (connectorId.HasValue) step.SetConnector(connectorId.Value);
 

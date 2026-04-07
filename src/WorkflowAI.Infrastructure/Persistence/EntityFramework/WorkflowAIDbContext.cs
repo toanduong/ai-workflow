@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using WorkflowAI.Domain.AIAgent;
-using WorkflowAI.Domain.Apollo;
 using WorkflowAI.Domain.Approvals;
 using WorkflowAI.Domain.Channels;
 using WorkflowAI.Domain.Connectors;
@@ -27,7 +26,6 @@ public sealed class WorkflowAIDbContext(DbContextOptions<WorkflowAIDbContext> op
     public DbSet<ApprovalAction> ApprovalActions => Set<ApprovalAction>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<AIAgentTask> AIAgentTasks => Set<AIAgentTask>();
-    public DbSet<ApolloEvent> ApolloEvents => Set<ApolloEvent>();
     public DbSet<TenantConnector> TenantConnectors => Set<TenantConnector>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

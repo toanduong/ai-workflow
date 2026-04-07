@@ -1,14 +1,18 @@
 using Anthropic;
 using Anthropic.Models.Messages;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using WorkflowAI.Application.Common.Interfaces;
 
 namespace WorkflowAI.Infrastructure.AI;
 
 public sealed class ClaudeAIService(
     AnthropicClient client,
+    IOptions<ClaudeAIOptions> options,
     ILogger<ClaudeAIService> logger) : IClaudeAIService
 {
+    private ClaudeAIOptions Options => options.Value;
+
     public async Task<AICompletionResult> CompleteAsync(string prompt, CancellationToken cancellationToken = default)
     {
         try
@@ -19,8 +23,8 @@ public sealed class ClaudeAIService(
             await foreach (var streamEvent in client.Messages.CreateStreaming(
                 new MessageCreateParams
                 {
-                    Model = "claude-opus-4-6",
-                    MaxTokens = 16000,
+                    Model = Options.Model,
+                    MaxTokens = Options.MaxTokens,
                     Thinking = new ThinkingConfigAdaptive(),
                     Messages = [new() { Role = Role.User, Content = prompt }]
                 }, cancellationToken: cancellationToken))
@@ -34,7 +38,7 @@ public sealed class ClaudeAIService(
                 if (streamEvent.TryPickDelta(out var msgDelta) &&
                     msgDelta.Usage is { } usage)
                 {
-                    totalTokens = usage.OutputTokens;
+                    totalTokens += usage.OutputTokens;
                 }
             }
 
@@ -80,8 +84,8 @@ public sealed class ClaudeAIService(
                 var response = await client.Messages.Create(
                     new MessageCreateParams
                     {
-                        Model = "claude-opus-4-6",
-                        MaxTokens = 16000,
+                        Model = Options.Model,
+                        MaxTokens = Options.MaxTokens,
                         Thinking = new ThinkingConfigAdaptive(),
                         Tools = claudeTools,
                         Messages = messages

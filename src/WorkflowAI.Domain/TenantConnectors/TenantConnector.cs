@@ -11,6 +11,12 @@ public sealed class TenantConnector : AggregateRoot<TenantConnectorId>
     public string Info { get; private set; } = string.Empty;
     public TenantConnectorStatus Status { get; private set; } = TenantConnectorStatus.Pending;
     public string? FailureReason { get; private set; }
+    /// <summary>
+    /// JSON dictionary mapping credential field names to their Key Vault secret names.
+    /// e.g. { "api_key": "connector-{id}-api_key" }
+    /// Null until credentials are stored after successful validation.
+    /// </summary>
+    public string? CredentialSecretNames { get; private set; }
 
     private TenantConnector() { }
 
@@ -34,10 +40,12 @@ public sealed class TenantConnector : AggregateRoot<TenantConnectorId>
         UpdatedAt = DateTime.UtcNow;
     }
 
-    public void Activate()
+    public void Activate(IReadOnlyDictionary<string, string>? credentialSecretNames = null)
     {
         Status = TenantConnectorStatus.Active;
         FailureReason = null;
+        if (credentialSecretNames is { Count: > 0 })
+            CredentialSecretNames = System.Text.Json.JsonSerializer.Serialize(credentialSecretNames);
         UpdatedAt = DateTime.UtcNow;
         RaiseDomainEvent(new TenantConnectorActivatedEvent(Id));
     }

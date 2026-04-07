@@ -1,41 +1,32 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using MediatR;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using WorkflowAI.Application.Common;
 using WorkflowAI.Application.Common.Interfaces;
 using WorkflowAI.Domain.Common;
 using WorkflowAI.Domain.TenantConnectors;
 
 namespace WorkflowAI.Application.TenantConnectors.Commands.ProvisionTenantConnector;
 
-public sealed class ProvisionTenantConnectorCommandHandler(
+public sealed partial class ProvisionTenantConnectorCommandHandler(
     ITenantConnectorRepository repository,
-    IClaudeAIService claudeAIService)
+    IClaudeAIService claudeAIService,
+    IOptions<ClaudePromptOptions> promptOptions,
+    ICurrentUserService currentUserService,
+    ILogger<ProvisionTenantConnectorCommandHandler> logger)
     : IRequestHandler<ProvisionTenantConnectorCommand, Result<ProvisionTenantConnectorResult>>
 {
-    private const string PromptTemplate = """
-        You are a connector metadata generator for a workflow automation platform.
-        For the 3rd party service "{0}", generate two JSON objects:
-
-        1. METADATA: Technical integration details including:
-           - authType: one of (APIKey|OAuth2|Basic|Bearer)
-           - requiredFields: array of field names needed for connection (e.g. ["api_key"])
-           - endpoints: object with key API endpoints, each having "method" and "path"
-           - configSchema: JSON Schema object for configuration fields
-           - testEndpoint: object with "method" and "path" to use for connection validation
-
-        2. INFO: Human-readable information including:
-           - description: what the service does (one sentence)
-           - docsUrl: official API documentation URL
-           - capabilities: array of things that can be automated
-           - rateLimits: string describing known rate limits
-           - webhookSupport: boolean
-
-        Return ONLY valid JSON in exactly this format with no extra text:
-        {"metadata": {...}, "info": {...}}
-        """;
+    [GeneratedRegex(@"[^a-zA-Z0-9 _\-]")]
+    private static partial Regex SafeConnectorNamePattern();
 
     public async Task<Result<ProvisionTenantConnectorResult>> Handle(
         ProvisionTenantConnectorCommand request, CancellationToken cancellationToken)
     {
+        if (!currentUserService.IsAuthenticated)
+            return Error.Unauthorized("Auth.Required", "User must be authenticated.");
+
         var tenantId = TenantId.From(request.TenantId);
 
         var existing = await repository.GetByTenantAndConnectorAsync(
@@ -45,16 +36,27 @@ public sealed class ProvisionTenantConnectorCommandHandler(
             return Error.Conflict("TenantConnector.AlreadyExists",
                 $"Connector '{request.ConnectorName}' already exists for this tenant.");
 
-        var prompt = PromptTemplate.Replace("{0}", request.ConnectorName);
+        var safeConnectorName = SafeConnectorNamePattern().Replace(request.ConnectorName, string.Empty);
+        var prompt = promptOptions.Value.ConnectorMetadataTemplate
+            .Replace("{connectorName}", safeConnectorName);
+
         var aiResult = await claudeAIService.CompleteAsync(prompt, cancellationToken);
 
         if (!aiResult.Success)
+        {
+            logger.LogError("Claude failed to generate metadata for connector '{ConnectorName}': {Error}",
+                request.ConnectorName, aiResult.ErrorMessage);
             return Error.Unexpected("TenantConnector.AIGenerationFailed",
                 aiResult.ErrorMessage ?? "Claude failed to generate connector metadata.");
+        }
 
         if (!TryParseClaudeResponse(aiResult.Content, out var metadata, out var info))
+        {
+            logger.LogError("Claude returned invalid JSON for connector '{ConnectorName}'. Content: {Content}",
+                request.ConnectorName, aiResult.Content);
             return Error.Unexpected("TenantConnector.InvalidAIResponse",
                 "Claude returned an invalid JSON response.");
+        }
 
         var connector = TenantConnector.Create(tenantId, request.ConnectorName);
         connector.SetMetadata(metadata, info);

@@ -8,7 +8,7 @@ public sealed class WorkflowAIDbContextFactory : IDesignTimeDbContextFactory<Wor
     public WorkflowAIDbContext CreateDbContext(string[] args)
     {
         var optionsBuilder = new DbContextOptionsBuilder<WorkflowAIDbContext>();
-        optionsBuilder.UseNpgsql("Host=localhost;Port=5432;Database=workflow-ai;Username=postgres;Password=LeVanLap12#10");
+        optionsBuilder.UseNpgsql("Host=localhost;Port=5433;Database=workflowai_dev;Username=postgres;Password=devpassword;Ssl Mode=Disable");
         return new WorkflowAIDbContext(optionsBuilder.Options);
     }
 }

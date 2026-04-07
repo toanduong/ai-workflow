@@ -1,7 +1,7 @@
-using System.Net.Http.Headers;
-using System.Text;
 using System.Text.Json;
 using MediatR;
+using Microsoft.Extensions.Logging;
+using WorkflowAI.Application.Common.Interfaces;
 using WorkflowAI.Domain.Common;
 using WorkflowAI.Domain.TenantConnectors;
 
@@ -9,12 +9,19 @@ namespace WorkflowAI.Application.TenantConnectors.Commands.ValidateTenantConnect
 
 public sealed class ValidateTenantConnectorCommandHandler(
     ITenantConnectorRepository repository,
+    ICredentialApplicatorFactory credentialApplicatorFactory,
+    IKeyVaultService keyVaultService,
+    ICurrentUserService currentUserService,
+    ILogger<ValidateTenantConnectorCommandHandler> logger,
     HttpClient httpClient)
     : IRequestHandler<ValidateTenantConnectorCommand, Result<bool>>
 {
     public async Task<Result<bool>> Handle(
         ValidateTenantConnectorCommand request, CancellationToken cancellationToken)
     {
+        if (!currentUserService.IsAuthenticated)
+            return Error.Unauthorized("Auth.Required", "User must be authenticated.");
+
         var id = TenantConnectorId.From(request.TenantConnectorId);
         var connector = await repository.GetByIdAsync(id, cancellationToken);
 
@@ -42,13 +49,15 @@ public sealed class ValidateTenantConnectorCommandHandler(
                 new HttpMethod(testEndpoint.Value.Method),
                 testEndpoint.Value.Path);
 
-            ApplyCredentials(httpRequest, authType, request.CredentialFields);
+            credentialApplicatorFactory.Resolve(authType).Apply(httpRequest, request.CredentialFields);
 
             var response = await httpClient.SendAsync(httpRequest, cancellationToken);
 
             if (response.IsSuccessStatusCode)
             {
-                connector.Activate();
+                var secretNames = await StoreCredentialsAsync(
+                    connector.Id, request.CredentialFields, cancellationToken);
+                connector.Activate(secretNames);
                 await repository.UpdateAsync(connector, cancellationToken);
                 return true;
             }
@@ -60,71 +69,26 @@ public sealed class ValidateTenantConnectorCommandHandler(
         }
         catch (Exception ex)
         {
+            logger.LogError(ex, "Connector validation failed for {ConnectorId}", request.TenantConnectorId);
             connector.MarkFailed(ex.Message);
             await repository.UpdateAsync(connector, cancellationToken);
             return false;
         }
     }
 
-    /// <summary>
-    /// Applies credentials to the HTTP request based on the authType from metadata.
-    /// Supports: APIKey, Bearer, Basic, OAuth2, ConnectionString.
-    /// Field names come from the metadata's requiredFields / configSchema.
-    /// </summary>
-    private static void ApplyCredentials(
-        HttpRequestMessage request,
-        string authType,
-        Dictionary<string, string> fields)
+    private async Task<Dictionary<string, string>> StoreCredentialsAsync(
+        TenantConnectorId connectorId,
+        IReadOnlyDictionary<string, string> fields,
+        CancellationToken cancellationToken)
     {
-        switch (authType)
+        var secretNames = new Dictionary<string, string>();
+        foreach (var (fieldName, value) in fields)
         {
-            case "APIKey":
-                // Common API key header names — use whichever field is provided
-                if (fields.TryGetValue("api_key", out var apiKey))
-                    request.Headers.Add("X-Api-Key", apiKey);
-                else if (fields.TryGetValue("apiKey", out var apiKey2))
-                    request.Headers.Add("X-Api-Key", apiKey2);
-                break;
-
-            case "Bearer":
-                if (fields.TryGetValue("token", out var token) ||
-                    fields.TryGetValue("access_token", out token) ||
-                    fields.TryGetValue("bearer_token", out token))
-                {
-                    request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-                }
-                break;
-
-            case "OAuth2":
-                if (fields.TryGetValue("access_token", out var oauthToken) ||
-                    fields.TryGetValue("token", out oauthToken))
-                {
-                    request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", oauthToken);
-                }
-                break;
-
-            case "Basic":
-                if (fields.TryGetValue("username", out var username) &&
-                    fields.TryGetValue("password", out var password))
-                {
-                    var credentials = Convert.ToBase64String(
-                        Encoding.UTF8.GetBytes($"{username}:{password}"));
-                    request.Headers.Authorization =
-                        new AuthenticationHeaderValue("Basic", credentials);
-                }
-                break;
-
-            case "ConnectionString":
-                // Connection strings aren't sent as headers — just attempt the endpoint
-                // The real validation would happen at the DB/service layer
-                break;
-
-            default:
-                // Fallback: try any field as a header
-                foreach (var (key, value) in fields)
-                    request.Headers.TryAddWithoutValidation(key, value);
-                break;
+            var secretName = $"connector-{connectorId.Value}-{fieldName}";
+            await keyVaultService.SetSecretAsync(secretName, value, ct: cancellationToken);
+            secretNames[fieldName] = secretName;
         }
+        return secretNames;
     }
 
     private static (string Method, string Path)? ExtractTestEndpoint(JsonElement metadata)

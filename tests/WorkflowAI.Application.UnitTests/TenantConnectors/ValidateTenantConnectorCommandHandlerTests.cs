@@ -1,6 +1,10 @@
 using System.Net;
+using System.Net.Http.Headers;
+using System.Text;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using WorkflowAI.Application.Common.Interfaces;
 using WorkflowAI.Application.TenantConnectors.Commands.ValidateTenantConnector;
 using WorkflowAI.Application.UnitTests.Common.Builders;
 using WorkflowAI.Domain.TenantConnectors;
@@ -10,9 +14,24 @@ namespace WorkflowAI.Application.UnitTests.TenantConnectors;
 public class ValidateTenantConnectorCommandHandlerTests
 {
     private readonly ITenantConnectorRepository _repository = Substitute.For<ITenantConnectorRepository>();
+    private readonly IKeyVaultService _keyVaultService = Substitute.For<IKeyVaultService>();
+    private readonly ICurrentUserService _currentUserService = Substitute.For<ICurrentUserService>();
+
+    public ValidateTenantConnectorCommandHandlerTests()
+    {
+        _currentUserService.IsAuthenticated.Returns(true);
+        _keyVaultService
+            .SetSecretAsync(Arg.Any<string>(), Arg.Any<string>(), ct: Arg.Any<CancellationToken>())
+            .Returns(("fake-secret", "1"));
+    }
 
     private ValidateTenantConnectorCommandHandler CreateHandler(HttpClient httpClient) =>
-        new(_repository, httpClient);
+        new(_repository,
+            new TestCredentialApplicatorFactory(),
+            _keyVaultService,
+            _currentUserService,
+            NullLogger<ValidateTenantConnectorCommandHandler>.Instance,
+            httpClient);
 
     // ── APIKey auth ──────────────────────────────────────────────────────────
 
@@ -199,6 +218,81 @@ public class ValidateTenantConnectorCommandHandlerTests
 
     private static HttpClient CreateThrowingHttpClient(Exception ex) =>
         new(new ThrowingHttpMessageHandler(ex));
+}
+
+// ── Test credential applicators (mirror Infrastructure implementations) ────
+
+internal sealed class TestApiKeyApplicator : ICredentialApplicator
+{
+    public string AuthType => "APIKey";
+    public void Apply(HttpRequestMessage request, IReadOnlyDictionary<string, string> fields)
+    {
+        if (fields.TryGetValue("api_key", out var key) || fields.TryGetValue("apiKey", out key))
+            request.Headers.Add("X-Api-Key", key);
+    }
+}
+
+internal sealed class TestBearerApplicator : ICredentialApplicator
+{
+    public string AuthType => "Bearer";
+    public void Apply(HttpRequestMessage request, IReadOnlyDictionary<string, string> fields)
+    {
+        if (fields.TryGetValue("token", out var token) ||
+            fields.TryGetValue("access_token", out token) ||
+            fields.TryGetValue("bearer_token", out token))
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        }
+    }
+}
+
+internal sealed class TestOAuth2Applicator : ICredentialApplicator
+{
+    public string AuthType => "OAuth2";
+    public void Apply(HttpRequestMessage request, IReadOnlyDictionary<string, string> fields)
+    {
+        if (fields.TryGetValue("access_token", out var token) || fields.TryGetValue("token", out token))
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+    }
+}
+
+internal sealed class TestBasicApplicator : ICredentialApplicator
+{
+    public string AuthType => "Basic";
+    public void Apply(HttpRequestMessage request, IReadOnlyDictionary<string, string> fields)
+    {
+        if (fields.TryGetValue("username", out var username) && fields.TryGetValue("password", out var password))
+        {
+            var creds = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{username}:{password}"));
+            request.Headers.Authorization = new AuthenticationHeaderValue("Basic", creds);
+        }
+    }
+}
+
+internal sealed class TestDefaultApplicator : ICredentialApplicator
+{
+    public string AuthType => "Default";
+    public void Apply(HttpRequestMessage request, IReadOnlyDictionary<string, string> fields)
+    {
+        foreach (var (key, value) in fields)
+            request.Headers.TryAddWithoutValidation(key, value);
+    }
+}
+
+internal sealed class TestCredentialApplicatorFactory : ICredentialApplicatorFactory
+{
+    private readonly ICredentialApplicator[] _applicators =
+    [
+        new TestApiKeyApplicator(),
+        new TestBearerApplicator(),
+        new TestOAuth2Applicator(),
+        new TestBasicApplicator(),
+        new TestDefaultApplicator()
+    ];
+
+    public ICredentialApplicator Resolve(string authType) =>
+        _applicators.FirstOrDefault(a => a.AuthType.Equals(authType, StringComparison.OrdinalIgnoreCase))
+        ?? _applicators.First(a => a.AuthType == "Default");
 }
 
 internal sealed class StubHttpMessageHandler(HttpStatusCode statusCode) : HttpMessageHandler

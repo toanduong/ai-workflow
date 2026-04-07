@@ -67,53 +67,6 @@ namespace WorkflowAI.Infrastructure.Migrations
                     b.ToTable("AIAgentTasks", (string)null);
                 });
 
-            modelBuilder.Entity("WorkflowAI.Domain.Apollo.ApolloEvent", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ClaudeResponse")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("ErrorMessage")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<string>("EventType")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<string>("Payload")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("ProcessedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("WorkflowExecutionId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CreatedAt");
-
-                    b.HasIndex("EventType");
-
-                    b.ToTable("ApolloEvents", (string)null);
-                });
-
             modelBuilder.Entity("WorkflowAI.Domain.Approvals.ApprovalAction", b =>
                 {
                     b.Property<Guid>("Id")
@@ -533,6 +486,9 @@ namespace WorkflowAI.Infrastructure.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CredentialSecretNames")
+                        .HasColumnType("text");
 
                     b.Property<string>("FailureReason")
                         .HasMaxLength(1000)

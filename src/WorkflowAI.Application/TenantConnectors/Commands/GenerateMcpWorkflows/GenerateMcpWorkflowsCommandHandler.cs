@@ -1,5 +1,6 @@
 using System.Text.Json;
 using MediatR;
+using Microsoft.Extensions.Logging;
 using WorkflowAI.Application.Common.Interfaces;
 using WorkflowAI.Domain.Common;
 using WorkflowAI.Domain.Templates;
@@ -10,12 +11,17 @@ namespace WorkflowAI.Application.TenantConnectors.Commands.GenerateMcpWorkflows;
 public sealed class GenerateMcpWorkflowsCommandHandler(
     ITenantConnectorRepository repository,
     ITemplateRepository templateRepository,
-    IClaudeAIService claudeAIService)
+    IClaudeAIService claudeAIService,
+    ICurrentUserService currentUserService,
+    ILogger<GenerateMcpWorkflowsCommandHandler> logger)
     : IRequestHandler<GenerateMcpWorkflowsCommand, Result<GenerateMcpWorkflowsResult>>
 {
     public async Task<Result<GenerateMcpWorkflowsResult>> Handle(
         GenerateMcpWorkflowsCommand request, CancellationToken cancellationToken)
     {
+        if (!currentUserService.IsAuthenticated)
+            return Error.Unauthorized("Auth.Required", "User must be authenticated.");
+
         var id = TenantConnectorId.From(request.TenantConnectorId);
         var connector = await repository.GetByIdAsync(id, cancellationToken);
 
@@ -26,6 +32,9 @@ public sealed class GenerateMcpWorkflowsCommandHandler(
         if (connector.Status != TenantConnectorStatus.Active)
             return Error.Validation("TenantConnector.NotActive",
                 $"Connector must be Active before generating workflows. Current status: {connector.Status.Name}");
+
+        logger.LogInformation("Generating workflows for connector {ConnectorId} ({ConnectorName})",
+            request.TenantConnectorId, connector.ConnectorName);
 
         var tools = new[]
         {
@@ -58,8 +67,12 @@ public sealed class GenerateMcpWorkflowsCommandHandler(
         var aiResult = await claudeAIService.CompleteWithToolsAsync(prompt, tools, cancellationToken);
 
         if (!aiResult.Success)
+        {
+            logger.LogError("Claude failed to generate workflows for connector {ConnectorId}: {Error}",
+                request.TenantConnectorId, aiResult.ErrorMessage);
             return Error.Unexpected("TenantConnector.WorkflowGenerationFailed",
                 aiResult.ErrorMessage ?? "Claude failed to generate workflows.");
+        }
 
         var toolCalls = aiResult.ToolCalls ?? [];
 
@@ -73,49 +86,61 @@ public sealed class GenerateMcpWorkflowsCommandHandler(
             .Select(t => t.InputJson)
             .ToList();
 
-        // Persist each API route as a WorkflowTemplate (category = connector name, type = "ApiRoute")
         foreach (var routeJson in apiRoutes)
         {
-            var routeDoc = JsonDocument.Parse(routeJson).RootElement;
-            var method = routeDoc.TryGetProperty("method", out var m) ? m.GetString() : "GET";
-            var path = routeDoc.TryGetProperty("path", out var p) ? p.GetString() : string.Empty;
-            var description = routeDoc.TryGetProperty("description", out var d) ? d.GetString() : null;
-
-            var defaultSteps = JsonSerializer.Serialize(new[]
+            try
             {
-                new
+                var routeDoc = JsonDocument.Parse(routeJson).RootElement;
+                var method = routeDoc.TryGetProperty("method", out var m) ? m.GetString() : "GET";
+                var path = routeDoc.TryGetProperty("path", out var p) ? p.GetString() : string.Empty;
+                var description = routeDoc.TryGetProperty("description", out var d) ? d.GetString() : null;
+
+                var defaultSteps = JsonSerializer.Serialize(new[]
                 {
-                    name = $"{method} {path}",
-                    stepType = "Action",
-                    httpMethod = method,
-                    configuration = routeJson
-                }
-            });
+                    new
+                    {
+                        name = $"{method} {path}",
+                        stepType = "Action",
+                        httpMethod = method,
+                        configuration = routeJson
+                    }
+                });
 
-            var template = WorkflowTemplate.Create(
-                name: $"{connector.ConnectorName}: {method} {path}",
-                description: description,
-                category: $"{connector.ConnectorName}/ApiRoute",
-                defaultSteps: defaultSteps);
+                var template = WorkflowTemplate.Create(
+                    name: $"{connector.ConnectorName}: {method} {path}",
+                    description: description,
+                    category: $"{connector.ConnectorName}/ApiRoute",
+                    defaultSteps: defaultSteps);
 
-            await templateRepository.AddAsync(template, cancellationToken);
+                await templateRepository.AddAsync(template, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Skipping malformed API route JSON for connector {ConnectorId}", request.TenantConnectorId);
+            }
         }
 
-        // Persist each workflow template as a WorkflowTemplate (category = connector name, type = "Workflow")
         foreach (var wfJson in workflowTemplates)
         {
-            var wfDoc = JsonDocument.Parse(wfJson).RootElement;
-            var name = wfDoc.TryGetProperty("name", out var n) ? n.GetString() : "Unnamed Workflow";
-            var description = wfDoc.TryGetProperty("description", out var d) ? d.GetString() : null;
-            var stepsElement = wfDoc.TryGetProperty("steps", out var s) ? s.GetRawText() : "[]";
+            try
+            {
+                var wfDoc = JsonDocument.Parse(wfJson).RootElement;
+                var name = wfDoc.TryGetProperty("name", out var n) ? n.GetString() : "Unnamed Workflow";
+                var description = wfDoc.TryGetProperty("description", out var d) ? d.GetString() : null;
+                var stepsElement = wfDoc.TryGetProperty("steps", out var s) ? s.GetRawText() : "[]";
 
-            var template = WorkflowTemplate.Create(
-                name: $"{connector.ConnectorName}: {name}",
-                description: description,
-                category: $"{connector.ConnectorName}/Workflow",
-                defaultSteps: stepsElement);
+                var template = WorkflowTemplate.Create(
+                    name: $"{connector.ConnectorName}: {name}",
+                    description: description,
+                    category: $"{connector.ConnectorName}/Workflow",
+                    defaultSteps: stepsElement);
 
-            await templateRepository.AddAsync(template, cancellationToken);
+                await templateRepository.AddAsync(template, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Skipping malformed workflow template JSON for connector {ConnectorId}", request.TenantConnectorId);
+            }
         }
 
         return new GenerateMcpWorkflowsResult(

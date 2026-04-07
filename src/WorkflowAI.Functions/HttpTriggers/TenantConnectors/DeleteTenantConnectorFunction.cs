@@ -1,13 +1,12 @@
-using System.Net;
 using MediatR;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
-using WorkflowAI.Domain.TenantConnectors;
+using WorkflowAI.Application.TenantConnectors.Commands.DeleteTenantConnector;
 using WorkflowAI.Functions.Extensions;
 
 namespace WorkflowAI.Functions.HttpTriggers.TenantConnectors;
 
-public sealed class DeleteTenantConnectorFunction(ITenantConnectorRepository repository)
+public sealed class DeleteTenantConnectorFunction(IMediator mediator)
 {
     [Function("DeleteTenantConnector")]
     public async Task<HttpResponseData> Run(
@@ -16,8 +15,8 @@ public sealed class DeleteTenantConnectorFunction(ITenantConnectorRepository rep
         Guid tenantId,
         Guid id)
     {
-        await repository.DeleteAsync(TenantConnectorId.From(id));
-        var response = req.CreateResponse(HttpStatusCode.NoContent);
-        return response;
+        var command = new DeleteTenantConnectorCommand(id);
+        var result = await mediator.Send(command);
+        return await req.CreateResultResponseAsync(result);
     }
 }

@@ -1,7 +1,5 @@
 using Anthropic;
-using WorkflowAI.Domain.Apollo;
 using WorkflowAI.Domain.TenantConnectors;
-using WorkflowAI.Infrastructure.Apollo;
 using Azure.Communication.Email;
 using Azure.Identity;
 using Azure.Messaging.ServiceBus;
@@ -22,6 +20,7 @@ using WorkflowAI.Domain.Templates;
 using WorkflowAI.Domain.Users;
 using WorkflowAI.Domain.Workflows;
 using WorkflowAI.Infrastructure.AI;
+using WorkflowAI.Infrastructure.Connectors.Auth;
 using WorkflowAI.Infrastructure.Connectors;
 using WorkflowAI.Infrastructure.Identity;
 using WorkflowAI.Infrastructure.LogicApps;
@@ -72,6 +71,9 @@ public static class DependencyInjection
         services.AddScoped<IAzureOpenAIService, AzureOpenAIService>();
 
         // Anthropic Claude
+        services.Configure<ClaudeAIOptions>(configuration.GetSection(ClaudeAIOptions.SectionName));
+        services.Configure<WorkflowAI.Application.Common.ClaudePromptOptions>(
+            configuration.GetSection(WorkflowAI.Application.Common.ClaudePromptOptions.SectionName));
         services.AddSingleton(sp =>
         {
             var apiKey = configuration["Anthropic:ApiKey"];
@@ -103,6 +105,14 @@ public static class DependencyInjection
         // Services
         services.AddSingleton<IDateTimeProvider, DateTimeProvider>();
 
+        // Credential applicators (Strategy pattern)
+        services.AddScoped<ICredentialApplicator, ApiKeyCredentialApplicator>();
+        services.AddScoped<ICredentialApplicator, BearerCredentialApplicator>();
+        services.AddScoped<ICredentialApplicator, OAuth2CredentialApplicator>();
+        services.AddScoped<ICredentialApplicator, BasicCredentialApplicator>();
+        services.AddScoped<ICredentialApplicator, DefaultCredentialApplicator>();
+        services.AddScoped<ICredentialApplicatorFactory, CredentialApplicatorFactory>();
+
         // Connector services
         services.AddScoped<IConnectorRepository, SqlConnectorRepository>();
         services.AddScoped<IConnectorService, ConnectorService>();
@@ -124,10 +134,6 @@ public static class DependencyInjection
             services.AddScoped<IKeyVaultService, NoOpKeyVaultService>();
         }
 
-        // Apollo
-        services.Configure<ApolloOptions>(configuration.GetSection(ApolloOptions.SectionName));
-        services.AddHttpClient<IApolloService, ApolloService>();
-        services.AddScoped<IApolloEventRepository, SqlApolloEventRepository>();
         services.AddScoped<ITenantConnectorRepository, SqlTenantConnectorRepository>();
 
         // HTTP client for ValidateTenantConnector
