@@ -1,6 +1,7 @@
 using System.Text.Json;
 using MediatR;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using WorkflowAI.Application.Common.Interfaces;
 using WorkflowAI.Domain.Common;
 using WorkflowAI.Domain.TenantConnectors;
@@ -16,6 +17,7 @@ public sealed class GenerateConnectorAssetsCommandHandler(
     ITenantConnectorRepository repository,
     IAnthropicService claudeAIService,
     ICurrentUserService currentUserService,
+    IOptions<ConnectorAssetGenerationOptions> options,
     ILogger<GenerateConnectorAssetsCommandHandler> logger)
     : IRequestHandler<GenerateConnectorAssetsCommand, Result<GenerateConnectorAssetsResult>>
 {
@@ -38,7 +40,7 @@ public sealed class GenerateConnectorAssetsCommandHandler(
 
         // Idempotency check — skip if API operations already exist for this connector
         var existingApis = await repository.GetApisByConnectorAsync(connector.Id, cancellationToken);
-        if (existingApis.Count > 0)
+        if (existingApis.Any())
         {
             logger.LogInformation(
                 "API operations already exist for connector {ConnectorId}, skipping generation",
@@ -54,25 +56,15 @@ public sealed class GenerateConnectorAssetsCommandHandler(
         var tools = new[]
         {
             new AIToolDefinition(
-                "create_api_operation",
+                ConnectorAssetConstants.CreateApiOperationToolName,
                 "Define an API operation (method + path) supported by the connector",
-                """{"type":"object","properties":{"method":{"type":"string"},"path":{"type":"string"},"description":{"type":"string"},"requestBody":{"type":"object"},"responseSchema":{"type":"object"}},"required":["method","path","description"]}""")
+                ConnectorAssetConstants.CreateApiOperationSchema)
         };
 
-        var prompt = $"""
-            You are an API discovery agent for a workflow automation platform.
-            Based on the following connector metadata and info for "{connector.ConnectorName}",
-            enumerate all API operations this connector supports.
-
-            METADATA:
-            {connector.Metadata}
-
-            INFO:
-            {connector.Info}
-
-            Use the create_api_operation tool for EVERY API operation this connector supports.
-            Be exhaustive — include all available endpoints, not just the most common ones.
-            """;
+        var prompt = options.Value.PromptTemplate
+            .Replace("{ConnectorName}", connector.ConnectorName)
+            .Replace("{Metadata}", connector.Metadata)
+            .Replace("{Info}", connector.Info);
 
         var aiResult = await claudeAIService.CompleteWithToolsAsync(prompt, tools, cancellationToken: cancellationToken);
 
@@ -80,7 +72,8 @@ public sealed class GenerateConnectorAssetsCommandHandler(
         {
             logger.LogError("Claude failed to generate assets for connector {ConnectorId}: {Error}",
                 request.TenantConnectorId, aiResult.ErrorMessage);
-            return Error.Unexpected("TenantConnector.AssetGenerationFailed",
+            return Error.Unexpected(
+                ConnectorAssetConstants.AssetGenerationFailedCode,
                 aiResult.ErrorMessage ?? "Claude failed to generate connector assets.");
         }
 
@@ -88,16 +81,38 @@ public sealed class GenerateConnectorAssetsCommandHandler(
 
         // API operations → TenantConnectorApis
         var apiOperationJsons = toolCalls
-            .Where(t => t.ToolName == "create_api_operation")
+            .Where(t => t.ToolName == ConnectorAssetConstants.CreateApiOperationToolName)
             .Select(t => t.InputJson)
             .ToList();
 
         var apiList = BuildApiList(connector, apiOperationJsons);
+
+        // Validate API count against limits
+        if (apiList.Count > options.Value.MaxApisPerConnector)
+        {
+            logger.LogError(
+                "Generated {Count} APIs exceeds maximum {Max} for connector {ConnectorId}",
+                apiList.Count, options.Value.MaxApisPerConnector, connector.Id);
+            return Error.Validation(
+                "TenantConnector.TooManyApis",
+                $"Generated {apiList.Count} APIs but maximum is {options.Value.MaxApisPerConnector}");
+        }
+
+        if (apiList.Count > options.Value.WarningThresholdApiCount)
+        {
+            logger.LogWarning(
+                "Generated {ApiCount} APIs (>{Threshold}) for connector {ConnectorId}",
+                apiList.Count, options.Value.WarningThresholdApiCount, connector.Id);
+        }
+
         if (apiList.Count > 0)
             await repository.AddApisAsync(apiList, cancellationToken);
 
+        logger.LogInformation("Generated and persisted {Count} API operations for connector {ConnectorId}",
+            apiList.Count, connector.Id);
+
         return new GenerateConnectorAssetsResult(
-            JsonSerializer.Serialize(apiOperationJsons),
+            JsonSerializer.Serialize(apiList.Select(a => new { a.ApiName, a.HttpMethod, a.UrlTemplate })),
             "[]");
     }
 
@@ -111,11 +126,48 @@ public sealed class GenerateConnectorAssetsCommandHandler(
             try
             {
                 var doc = JsonDocument.Parse(opJson).RootElement;
-                var method = doc.TryGetProperty("method", out var m) ? m.GetString() : "GET";
-                var path = doc.TryGetProperty("path", out var p) ? p.GetString() : string.Empty;
 
-                var urlTemplate = !string.IsNullOrEmpty(path) &&
-                                  path.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+                // Extract and validate method
+                if (!doc.TryGetProperty("method", out var methodElement))
+                {
+                    logger.LogWarning("API operation missing 'method' field for connector {ConnectorId}",
+                        connector.Id);
+                    continue;
+                }
+
+                var method = methodElement.GetString()?.ToUpperInvariant() ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(method))
+                {
+                    logger.LogWarning("API operation has empty 'method' for connector {ConnectorId}",
+                        connector.Id);
+                    continue;
+                }
+
+                if (!ConnectorAssetConstants.ValidHttpMethods.Contains(method))
+                {
+                    logger.LogWarning(
+                        "API operation has invalid HTTP method '{Method}' for connector {ConnectorId}",
+                        method, connector.Id);
+                    continue;
+                }
+
+                // Extract and validate path
+                if (!doc.TryGetProperty("path", out var pathElement))
+                {
+                    logger.LogWarning("API operation missing 'path' field for connector {ConnectorId}",
+                        connector.Id);
+                    continue;
+                }
+
+                var path = pathElement.GetString();
+                if (string.IsNullOrWhiteSpace(path))
+                {
+                    logger.LogWarning("API operation has empty 'path' for connector {ConnectorId}",
+                        connector.Id);
+                    continue;
+                }
+
+                var urlTemplate = path.StartsWith("http", StringComparison.OrdinalIgnoreCase)
                     ? path
                     : $"{baseUrl}{path}";
 
@@ -124,37 +176,62 @@ public sealed class GenerateConnectorAssetsCommandHandler(
                     connector.TenantId,
                     connector.ConnectorName,
                     apiName: $"{method} {path}",
-                    httpMethod: method ?? "GET",
+                    httpMethod: method,
                     urlTemplate: urlTemplate,
                     metadata: opJson));
             }
-            catch (Exception ex)
+            catch (JsonException ex)
             {
                 logger.LogWarning(ex, "Skipping malformed API operation JSON for connector {ConnectorId}",
+                    connector.Id);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Unexpected error processing API operation for connector {ConnectorId}",
                     connector.Id);
             }
         }
 
         // Deduplicate — Claude may return the same operation more than once
-        return apis
+        var deduplicated = apis
             .GroupBy(a => a.ApiName, StringComparer.OrdinalIgnoreCase)
             .Select(g => g.First())
             .ToList();
+
+        if (deduplicated.Count < apis.Count)
+        {
+            logger.LogInformation(
+                "Deduplicated {DuplicateCount} duplicate APIs for connector {ConnectorId}",
+                apis.Count - deduplicated.Count, connector.Id);
+        }
+
+        return deduplicated;
     }
 
     /// <summary>
     /// Extracts baseUrl from Claude-generated connector metadata.
     /// Placeholder tokens (e.g. "{instance_url}") are kept as-is for later credential substitution.
+    /// Returns empty string if not found or metadata is invalid JSON.
     /// </summary>
-    private static string ExtractBaseUrl(string metadata)
+    private string ExtractBaseUrl(string metadata)
     {
+        if (string.IsNullOrWhiteSpace(metadata))
+            return string.Empty;
+
         try
         {
-            var doc = JsonDocument.Parse(metadata);
+            using var doc = JsonDocument.Parse(metadata);
             if (doc.RootElement.TryGetProperty("baseUrl", out var bu))
-                return (bu.GetString() ?? string.Empty).TrimEnd('/');
+            {
+                var baseUrl = bu.GetString();
+                if (!string.IsNullOrWhiteSpace(baseUrl))
+                    return baseUrl.TrimEnd('/');
+            }
         }
-        catch (JsonException) { }
+        catch (JsonException ex)
+        {
+            logger.LogWarning(ex, "Failed to extract baseUrl from connector metadata");
+        }
 
         return string.Empty;
     }

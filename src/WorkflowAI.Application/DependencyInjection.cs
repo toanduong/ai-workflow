@@ -2,6 +2,7 @@ using FluentValidation;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 using WorkflowAI.Application.Common.Behaviors;
+using WorkflowAI.Application.TenantConnectors.Commands.GenerateConnectorAssets;
 
 namespace WorkflowAI.Application;
 
@@ -21,6 +22,9 @@ public static class DependencyInjection
         });
 
         services.AddValidatorsFromAssembly(assembly);
+
+        // Configure connector asset generation options
+        services.Configure<ConnectorAssetGenerationOptions>(options => { });
 
         return services;
     }
