@@ -42,6 +42,10 @@ public sealed class TenantConnectorApiConfiguration : IEntityTypeConfiguration<T
             .HasColumnType("text")
             .IsRequired();
 
+        builder.Property(e => e.Version)
+            .HasDefaultValue(1)
+            .IsRequired();
+
         // Index for fast lookup by connector
         builder.HasIndex(e => e.TenantConnectorId);
 

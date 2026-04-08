@@ -27,6 +27,7 @@ public sealed class TenantConnectorApi : Entity<TenantConnectorApiId>
     public string HttpMethod { get; private set; } = string.Empty;     // GET | POST | PUT | DELETE | PATCH
     public string UrlTemplate { get; private set; } = string.Empty;    // e.g. "https://{odoo_instance}/api/res.partner"
     public string Metadata { get; private set; } = string.Empty;       // Full JSON: headers, requestMapping, responseMapping
+    public int Version { get; private set; } = 1;                      // Incremented when Claude re-discovers this API with schema changes
 
     private TenantConnectorApi() { }
 
@@ -56,6 +57,12 @@ public sealed class TenantConnectorApi : Entity<TenantConnectorApiId>
     public void UpdateMetadata(string metadata)
     {
         Metadata = metadata;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void IncrementVersion()
+    {
+        Version++;
         UpdatedAt = DateTime.UtcNow;
     }
 }
