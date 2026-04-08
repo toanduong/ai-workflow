@@ -117,6 +117,7 @@ public static class DependencyInjection
         services.AddScoped<IApiConnectionProvisioner, ApiConnectionProvisioner>();
         services.AddScoped<IConnectorCredentialResolver, ConnectorCredentialResolver>();
         services.AddScoped<ITenantConnectorRepository, SqlTenantConnectorRepository>();
+        services.AddScoped<ITenantConnectorApiHealthCheckRepository, SqlTenantConnectorApiHealthCheckRepository>();
         services.AddScoped<IConnectorHttpValidator, ConnectorHttpValidator>();
 
         // HTTP client for HttpStep execution

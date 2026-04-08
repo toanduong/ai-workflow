@@ -28,6 +28,7 @@ public sealed class WorkflowAIDbContext(DbContextOptions<WorkflowAIDbContext> op
     public DbSet<AIAgentTask> AIAgentTasks => Set<AIAgentTask>();
     public DbSet<TenantConnector> TenantConnectors => Set<TenantConnector>();
     public DbSet<TenantConnectorApi> TenantConnectorApis => Set<TenantConnectorApi>();
+    public DbSet<TenantConnectorApiHealthCheck> TenantConnectorApiHealthChecks => Set<TenantConnectorApiHealthCheck>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
