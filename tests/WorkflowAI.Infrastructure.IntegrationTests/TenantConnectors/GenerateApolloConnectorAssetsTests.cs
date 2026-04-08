@@ -96,7 +96,7 @@ public class GenerateApolloConnectorAssetsTests
         currentUser.IsAuthenticated.Returns(true);
 
         var handler = new GenerateConnectorAssetsCommandHandler(
-            repo, templateRepo, anthropicService, currentUser,
+            repo, anthropicService, currentUser,
             NullLogger<GenerateConnectorAssetsCommandHandler>.Instance);
 
         return (handler, captured, connector.Id.Value);

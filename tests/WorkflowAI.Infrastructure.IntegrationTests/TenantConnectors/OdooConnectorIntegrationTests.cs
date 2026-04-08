@@ -108,9 +108,6 @@ public class OdooConnectorIntegrationTests : IAsyncLifetime
     private SqlTenantConnectorRepository _repository = null!;
     private AnthropicService _anthropicService = null!;
 
-    // Track created connectors for cleanup
-    private readonly List<TenantConnectorId> _createdIds = [];
-
     // ── Setup ─────────────────────────────────────────────────────────────
     public async Task InitializeAsync()
     {
@@ -136,14 +133,9 @@ public class OdooConnectorIntegrationTests : IAsyncLifetime
         await Task.CompletedTask;
     }
 
-    // ── Teardown: clean up rows created during tests ───────────────────────
+    // ── Teardown: data is kept in the database for inspection ─────────────
     public async Task DisposeAsync()
     {
-        foreach (var id in _createdIds)
-        {
-            await _repository.DeleteApisByConnectorAsync(id);
-            await _repository.DeleteAsync(id);
-        }
         await _db.DisposeAsync();
     }
 
@@ -188,8 +180,6 @@ public class OdooConnectorIntegrationTests : IAsyncLifetime
         saved!.ConnectorName.Should().Be(connectorName);
         saved.Status.Should().Be(TenantConnectorStatus.Pending);
         saved.Metadata.Should().Be(result.Value.Metadata);
-
-        _createdIds.Add(saved.Id);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -207,7 +197,6 @@ public class OdooConnectorIntegrationTests : IAsyncLifetime
             new ProvisionTenantConnectorCommand(tenantId, "Apollo"),
             CancellationToken.None);
         first.IsSuccess.Should().BeTrue();
-        _createdIds.Add(TenantConnectorId.From(first.Value!.TenantConnectorId));
 
         // Same tenant + same connector name → conflict
         var second = await handler.Handle(
@@ -258,7 +247,6 @@ public class OdooConnectorIntegrationTests : IAsyncLifetime
         provision.IsSuccess.Should().BeTrue(
             $"Provision failed: {provision.Error?.Code} — {provision.Error?.Message}");
         var connectorId = provision.Value!.TenantConnectorId;
-        _createdIds.Add(TenantConnectorId.From(connectorId));
 
         // Step 2 — Validate: test real HTTP connection
         // Credentials are passed as-is; the handler resolves baseUrl and auth from Claude-generated metadata.
@@ -291,11 +279,9 @@ public class OdooConnectorIntegrationTests : IAsyncLifetime
         var connector = await _repository.GetByIdAsync(TenantConnectorId.From(connectorId));
         connector!.Status.Should().Be(TenantConnectorStatus.Active);
 
-        // Step 3 — GenerateConnectorAssets: Claude discovers API operations → TenantConnectorApis
-        //                                   and workflow templates → WorkflowTemplates
-        var templateRepo = new SqlTemplateRepository(_db);
+        // Step 3 — GenerateConnectorAssets: Claude discovers API operations → TenantConnectorApis only
         var generateHandler = new GenerateConnectorAssetsCommandHandler(
-            _repository, templateRepo, _anthropicService, currentUser,
+            _repository, _anthropicService, currentUser,
             NullLogger<GenerateConnectorAssetsCommandHandler>.Instance);
 
         var generate = await generateHandler.Handle(
