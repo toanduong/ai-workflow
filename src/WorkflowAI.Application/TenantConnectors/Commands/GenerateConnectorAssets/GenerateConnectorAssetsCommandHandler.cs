@@ -57,14 +57,11 @@ public sealed class GenerateConnectorAssetsCommandHandler(
         {
             new AIToolDefinition(
                 ConnectorAssetConstants.CreateApiOperationToolName,
-                "Define an API operation (method + path) supported by the connector",
+                "Register one API operation supported by this connector. Call once per operation.",
                 ConnectorAssetConstants.CreateApiOperationSchema)
         };
 
-        var prompt = options.Value.PromptTemplate
-            .Replace("{ConnectorType}", connector.ConnectorType)
-            .Replace("{Metadata}", connector.Metadata)
-            .Replace("{Info}", connector.Info);
+        var prompt = BuildDiscoveryPrompt(connector.ConnectorType, connector.Metadata, connector.Info);
 
         var aiResult = await claudeAIService.CompleteWithToolsAsync(prompt, tools, cancellationToken: cancellationToken);
 
@@ -206,6 +203,40 @@ public sealed class GenerateConnectorAssetsCommandHandler(
         }
 
         return deduplicated;
+    }
+
+    private static string BuildDiscoveryPrompt(string connectorName, string metadata, string info)
+    {
+        return
+            "You are an API discovery agent for a workflow automation platform.\n" +
+            $"Your job is to enumerate ALL operations supported by the \"{connectorName}\" connector.\n\n" +
+            "CONNECTOR METADATA:\n" +
+            metadata + "\n\n" +
+            "CONNECTOR INFO:\n" +
+            info + "\n\n" +
+            "Call the create_api_operation tool once for EVERY API operation this connector supports.\n" +
+            "Be exhaustive — include all available endpoints.\n\n" +
+            "Rules for each operation:\n" +
+            "1. \"method\" — the actual HTTP verb: GET, POST, PUT, PATCH, DELETE, or WEBHOOK\n" +
+            "2. \"path\" — the URL path relative to baseUrl. Use {param}-style placeholders for dynamic segments.\n" +
+            "      REST example:    /crm/v3/objects/contacts\n" +
+            "      REST with param: /crm/v3/objects/contacts/{contactId}\n" +
+            "      XML-RPC (Odoo):  /xmlrpc/2/object  (all Odoo calls go here — put model+method in description)\n" +
+            "      GraphQL:         /graphql           (single endpoint — put operation name in description)\n" +
+            "3. \"description\" — be specific: include the resource name and what it does.\n" +
+            "      Good: \"Search contacts by email, name, or company using filter operators\"\n" +
+            "      Bad:  \"Search contacts\"\n" +
+            "      For XML-RPC: \"Odoo res.partner search_read — list contacts and companies\"\n" +
+            "      For GraphQL: \"GitHub query: list repositories for authenticated user\"\n" +
+            "4. \"requestBody\" — JSON schema of the request body (omit for GET/DELETE).\n" +
+            "5. \"responseSchema\" — JSON schema of the response (omit if unknown).\n\n" +
+            "Protocol-specific guidance:\n" +
+            "- REST (HubSpot, Apollo, Salesforce, Slack, etc.): one tool call per endpoint+method combination.\n" +
+            "- XML-RPC (Odoo): path is always /xmlrpc/2/object. Create one operation per model+method pair.\n" +
+            "      e.g. description: \"Odoo res.partner search_read\", \"Odoo sale.order create\"\n" +
+            "- GraphQL (Shopify, GitHub): path is always /graphql. Create one operation per query/mutation.\n" +
+            "- Webhooks: create operations with method WEBHOOK and path = the event type.\n" +
+            "      e.g. path: \"contact.creation\", \"deal.propertyChange\"\n";
     }
 
     /// <summary>

@@ -59,6 +59,7 @@ public static class DependencyInjection
         services.AddScoped<IApprovalRepository, SqlApprovalRepository>();
         services.AddScoped<INotificationRepository, SqlNotificationRepository>();
         services.AddScoped<IAIAgentTaskRepository, SqlAIAgentTaskRepository>();
+        services.AddScoped<IAIModelRepository, SqlAIModelRepository>();
 
         // Service Bus
         services.AddSingleton(sp =>

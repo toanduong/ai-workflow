@@ -17,11 +17,11 @@ public static class ConnectorAssetConstants
         {
           "type": "object",
           "properties": {
-            "method": { "type": "string", "description": "HTTP method (GET, POST, PUT, PATCH, DELETE)" },
-            "path": { "type": "string", "description": "API endpoint path" },
-            "description": { "type": "string", "description": "What this API operation does" },
-            "requestBody": { "type": "object", "description": "Request body schema" },
-            "responseSchema": { "type": "object", "description": "Response schema" }
+            "method": { "type": "string", "description": "HTTP verb: GET, POST, PUT, PATCH, DELETE, or WEBHOOK" },
+            "path": { "type": "string", "description": "URL path relative to baseUrl, or event type for WEBHOOK" },
+            "description": { "type": "string", "description": "What this operation does — be specific about the resource and action" },
+            "requestBody": { "type": "object", "description": "JSON schema of the request body (omit for GET/DELETE)" },
+            "responseSchema": { "type": "object", "description": "JSON schema of the response" }
           },
           "required": ["method", "path", "description"]
         }
@@ -35,5 +35,5 @@ public static class ConnectorAssetConstants
     /// <summary>
     /// Valid HTTP methods that Claude should generate.
     /// </summary>
-    public static readonly string[] ValidHttpMethods = { "GET", "POST", "PUT", "PATCH", "DELETE" };
+    public static readonly string[] ValidHttpMethods = { "GET", "POST", "PUT", "PATCH", "DELETE", "WEBHOOK" };
 }

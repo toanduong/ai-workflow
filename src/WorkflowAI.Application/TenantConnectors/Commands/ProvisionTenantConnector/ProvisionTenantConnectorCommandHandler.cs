@@ -17,43 +17,75 @@ public sealed class ProvisionTenantConnectorCommandHandler(
 
         1. METADATA — technical integration details:
         {{
-          "authType": "APIKey | OAuth2 | Basic | Bearer",
+          "authType": "<see authType rules>",
+          "protocol": "<see protocol rules>",
           "requiredFields": ["field1", "field2"],
-          "baseUrl": "<see rules below>",
-          "testEndpoint": {{ "method": "GET", "path": "/api/health" }},
+          "baseUrl": "<see baseUrl rules>",
+          "testEndpoint": {{ "method": "GET|POST", "path": "/...", "body": "...", "contentType": "..." }},
           "configSchema": {{
             "field1": {{ "type": "string", "description": "...", "required": true }}
           }}
         }}
 
+        Rules for "authType" (pick exactly one):
+          - "APIKey"  — credentials sent as a header (X-Api-Key, api-key, etc.)
+          - "Bearer"  — credentials sent as Authorization: Bearer {token}
+          - "Basic"   — credentials sent as Authorization: Basic base64(login:password)
+          - "OAuth2"  — OAuth2 flow with client_id + client_secret
+          - "XMLRpc"  — XML-RPC protocol (Odoo, legacy ERP systems)
+          - "NoAuth"  — public API, no auth required
+
+        Rules for "protocol" (pick exactly one):
+          - "REST"    — standard HTTP REST with JSON (most SaaS: HubSpot, Apollo, Salesforce, Slack, etc.)
+          - "XMLRpc"  — XML-RPC (Odoo, legacy ERPs)
+          - "GraphQL" — GraphQL (Shopify, GitHub, etc.)
+          - "SOAP"    — SOAP/WSDL (legacy enterprise systems)
+
+        Rules for "requiredFields":
+          - Include ONLY the fields the end user must provide to connect (credentials, URLs).
+          - Use these exact field names by convention:
+              API key        → "api_key"
+              Bearer token   → "access_token"
+              Instance URL   → "instance_url"   (self-hosted, URL differs per customer)
+              Base URL       → "base_url"        (self-hosted alternative)
+              Username/login → "username"
+              Password       → "password"
+              Client ID      → "client_id"
+              Client secret  → "client_secret"
+
         Rules for "baseUrl":
-          - SaaS / cloud-hosted services (fixed URL for all users):
-              Use the actual base URL, e.g. "https://api.apollo.io"
-          - Self-hosted or per-tenant services (URL differs per customer):
-              Use a placeholder that matches the field name in requiredFields,
-              e.g. "{instance_url}" — the platform substitutes it at runtime.
-          Examples: Apollo → "https://api.apollo.io"
-                    Odoo  → "{instance_url}"  (with "instance_url" in requiredFields)
-                    Chatwoot → "{base_url}"   (with "base_url" in requiredFields)
+          - SaaS / cloud-hosted (same URL for all customers): use the real URL
+              Apollo    → "https://api.apollo.io"
+              HubSpot   → "https://api.hubapi.com"
+              Salesforce → "https://login.salesforce.com"
+          - Self-hosted or per-tenant (URL differs per customer): use a placeholder
+              Odoo      → "{instance_url}"   (matches field name in requiredFields)
+              Chatwoot  → "{base_url}"
+              Mattermost → "{instance_url}"
+          - The placeholder must exactly match a field name in requiredFields.
 
         Rules for "testEndpoint":
-          - Use the simplest endpoint that confirms the credentials are valid and returns HTTP 2xx.
-          - Prefer a dedicated health/ping/version endpoint if one exists.
-          - If the endpoint requires a request body (e.g. JSON-RPC services like Odoo), include:
-              "body": "{}", "contentType": "application/json"
-          - Examples:
-              GET  /health            → {{ "method": "GET",  "path": "/health" }}
-              POST /web/webclient/version_info (Odoo JSON-RPC) →
-                   {{ "method": "POST", "path": "/web/webclient/version_info",
-                      "body": "{{}}", "contentType": "application/json" }}
+          - Use the simplest endpoint that confirms auth works and returns HTTP 2xx.
+          - Prefer a health/ping/version/me endpoint that requires no parameters.
+          - "path" must be relative (starts with /). Full URL = baseUrl + path.
+          - For REST APIs:
+              {{ "method": "GET", "path": "/v1/account" }}
+          - For XML-RPC services (Odoo): use the version endpoint which needs no auth
+              {{ "method": "POST", "path": "/xmlrpc/2/common",
+                 "body": "<?xml version='1.0'?><methodCall><methodName>version</methodName><params/></methodCall>",
+                 "contentType": "text/xml" }}
+          - For GraphQL:
+              {{ "method": "POST", "path": "/graphql",
+                 "body": "{{\"query\":\"{{ __typename }}\"}}", "contentType": "application/json" }}
 
         2. INFO — human-readable details:
         {{
-          "description": "What this service does",
-          "docsUrl": "https://docs.example.com/api",
-          "capabilities": ["capability1", "capability2"],
-          "rateLimits": "e.g. 1000 requests/hour",
-          "webhookSupport": true
+          "description": "One sentence: what this service does and who uses it",
+          "docsUrl": "https://developers.example.com/api",
+          "capabilities": ["list", "of", "key", "features"],
+          "rateLimits": "e.g. 100 requests/10s, 1000/day",
+          "webhookSupport": true,
+          "apiVersion": "v3"
         }}
 
         Return ONLY valid JSON in this exact format, no markdown, no extra text:
