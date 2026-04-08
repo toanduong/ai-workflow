@@ -37,9 +37,15 @@ public sealed class ProvisionTenantConnectorCommandHandler(
                     Chatwoot → "{base_url}"   (with "base_url" in requiredFields)
 
         Rules for "testEndpoint":
-          - MUST be a plain GET that returns HTTP 2xx with no request body, cookies, or session.
-          - Good examples: "/health", "/api/health", "/status", "/ping", "/v1/auth/health"
-          - If no dedicated health endpoint exists, use "/".
+          - Use the simplest endpoint that confirms the credentials are valid and returns HTTP 2xx.
+          - Prefer a dedicated health/ping/version endpoint if one exists.
+          - If the endpoint requires a request body (e.g. JSON-RPC services like Odoo), include:
+              "body": "{}", "contentType": "application/json"
+          - Examples:
+              GET  /health            → {{ "method": "GET",  "path": "/health" }}
+              POST /web/webclient/version_info (Odoo JSON-RPC) →
+                   {{ "method": "POST", "path": "/web/webclient/version_info",
+                      "body": "{{}}", "contentType": "application/json" }}
 
         2. INFO — human-readable details:
         {{

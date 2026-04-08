@@ -24,7 +24,7 @@ public sealed class ValidateTenantConnectorFunction(IMediator mediator)
             return badRequest;
         }
 
-        var command = new ValidateTenantConnectorCommand(id, body.CredentialFields);
+        var command = new ValidateTenantConnectorCommand(tenantId, id, body.CredentialFields);
         var result = await mediator.Send(command);
         return await req.CreateResultResponseAsync(result);
     }

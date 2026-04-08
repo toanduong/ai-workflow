@@ -7,6 +7,7 @@ using Microsoft.Extensions.Options;
 using NSubstitute;
 using System.Text.Json;
 using WorkflowAI.Application.Common.Interfaces;
+using WorkflowAI.Application.TenantConnectors.Commands.GenerateConnectorAssets;
 using WorkflowAI.Application.TenantConnectors.Commands.ProvisionTenantConnector;
 using WorkflowAI.Application.TenantConnectors.Commands.ValidateTenantConnector;
 using WorkflowAI.Domain.TenantConnectors;
@@ -279,7 +280,7 @@ public class OdooConnectorIntegrationTests : IAsyncLifetime
             new HttpClient());
 
         var validate = await validateHandler.Handle(
-            new ValidateTenantConnectorCommand(connectorId, credentials),
+            new ValidateTenantConnectorCommand(tenantId, connectorId, credentials),
             CancellationToken.None);
 
         validate.IsSuccess.Should().BeTrue();
@@ -289,6 +290,30 @@ public class OdooConnectorIntegrationTests : IAsyncLifetime
         // Assert Table 1 status = Active
         var connector = await _repository.GetByIdAsync(TenantConnectorId.From(connectorId));
         connector!.Status.Should().Be(TenantConnectorStatus.Active);
+
+        // Step 3 — GenerateConnectorAssets: Claude discovers API operations → TenantConnectorApis
+        //                                   and workflow templates → WorkflowTemplates
+        var templateRepo = new SqlTemplateRepository(_db);
+        var generateHandler = new GenerateConnectorAssetsCommandHandler(
+            _repository, templateRepo, _anthropicService, currentUser,
+            NullLogger<GenerateConnectorAssetsCommandHandler>.Instance);
+
+        var generate = await generateHandler.Handle(
+            new GenerateConnectorAssetsCommand(connectorId), CancellationToken.None);
+
+        generate.IsSuccess.Should().BeTrue(
+            $"GenerateConnectorAssets failed: {generate.Error?.Code} — {generate.Error?.Message}");
+        generate.Value!.ApiRoutes.Should().NotBe("[]",
+            "Claude should have returned at least one API operation");
+
+        // Assert TenantConnectorApis rows were saved (SRP: operations go here, not WorkflowTemplates)
+        var apis = await _repository.GetApisByConnectorAsync(TenantConnectorId.From(connectorId));
+        apis.Should().NotBeEmpty("TenantConnectorApis must be populated by GenerateConnectorAssets");
+        apis.Should().AllSatisfy(api =>
+        {
+            api.HttpMethod.Should().NotBeNullOrEmpty();
+            api.UrlTemplate.Should().NotBeNullOrEmpty();
+        });
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────

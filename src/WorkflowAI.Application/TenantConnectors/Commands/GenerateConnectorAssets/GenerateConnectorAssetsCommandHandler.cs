@@ -33,25 +33,37 @@ public sealed class GenerateConnectorAssetsCommandHandler(
             return Error.Validation("TenantConnector.NotActive",
                 $"Connector must be Active before generating assets. Current status: {connector.Status.Name}");
 
+        // Idempotency check — skip if API operations already exist for this connector
+        var existingApis = await repository.GetApisByConnectorAsync(connector.Id, cancellationToken);
+        if (existingApis.Count > 0)
+        {
+            logger.LogInformation(
+                "API operations already exist for connector {ConnectorId}, skipping generation",
+                request.TenantConnectorId);
+            return new GenerateConnectorAssetsResult(
+                JsonSerializer.Serialize(existingApis.Select(a => a.Metadata).ToList()),
+                "[]");
+        }
+
         logger.LogInformation("Generating connector assets for {ConnectorId} ({ConnectorName})",
             request.TenantConnectorId, connector.ConnectorName);
 
         var tools = new[]
         {
             new AIToolDefinition(
-                "create_api_route",
-                "Define a new API route for the connector",
+                "create_api_operation",
+                "Define an API operation (method + path) supported by the connector",
                 """{"type":"object","properties":{"method":{"type":"string"},"path":{"type":"string"},"description":{"type":"string"},"requestBody":{"type":"object"},"responseSchema":{"type":"object"}},"required":["method","path","description"]}"""),
             new AIToolDefinition(
                 "create_workflow_template",
-                "Define a workflow template for the connector",
+                "Define a reusable workflow template for the connector",
                 """{"type":"object","properties":{"name":{"type":"string"},"trigger":{"type":"string"},"steps":{"type":"array","items":{"type":"object"}},"description":{"type":"string"}},"required":["name","trigger","steps","description"]}""")
         };
 
         var prompt = $"""
             You are an API and workflow generator for a workflow automation platform.
             Based on the following connector metadata and info for "{connector.ConnectorName}",
-            generate useful API routes and workflow templates.
+            generate API operations and workflow templates.
 
             METADATA:
             {connector.Metadata}
@@ -59,9 +71,9 @@ public sealed class GenerateConnectorAssetsCommandHandler(
             INFO:
             {connector.Info}
 
-            Use the create_api_route tool to define each API route.
-            Use the create_workflow_template tool to define each workflow template.
-            Generate at least 3 API routes and 2 workflow templates that would be useful for this connector.
+            Use the create_api_operation tool for each API operation the connector supports.
+            Use the create_workflow_template tool for each reusable workflow template.
+            Generate at least 3 API operations and 2 workflow templates.
             """;
 
         var aiResult = await claudeAIService.CompleteWithToolsAsync(prompt, tools, cancellationToken: cancellationToken);
@@ -76,52 +88,23 @@ public sealed class GenerateConnectorAssetsCommandHandler(
 
         var toolCalls = aiResult.ToolCalls ?? [];
 
-        var apiRoutes = toolCalls
-            .Where(t => t.ToolName == "create_api_route")
+        // API operations → TenantConnectorApis (SRP: health checks + workflow step building)
+        var apiOperationJsons = toolCalls
+            .Where(t => t.ToolName == "create_api_operation")
             .Select(t => t.InputJson)
             .ToList();
 
-        var workflowTemplates = toolCalls
+        var apiList = BuildApiList(connector, apiOperationJsons);
+        if (apiList.Count > 0)
+            await repository.AddApisAsync(apiList, cancellationToken);
+
+        // Workflow templates → WorkflowTemplates (SRP: user-instantiable workflows)
+        var workflowJsons = toolCalls
             .Where(t => t.ToolName == "create_workflow_template")
             .Select(t => t.InputJson)
             .ToList();
 
-        foreach (var routeJson in apiRoutes)
-        {
-            try
-            {
-                var routeDoc = JsonDocument.Parse(routeJson).RootElement;
-                var method = routeDoc.TryGetProperty("method", out var m) ? m.GetString() : "GET";
-                var path = routeDoc.TryGetProperty("path", out var p) ? p.GetString() : string.Empty;
-                var description = routeDoc.TryGetProperty("description", out var d) ? d.GetString() : null;
-
-                var defaultSteps = JsonSerializer.Serialize(new[]
-                {
-                    new
-                    {
-                        name = $"{method} {path}",
-                        stepType = "Action",
-                        httpMethod = method,
-                        configuration = routeJson
-                    }
-                });
-
-                var template = WorkflowTemplate.Create(
-                    name: $"{connector.ConnectorName}: {method} {path}",
-                    description: description,
-                    category: $"{connector.ConnectorName}/ApiRoute",
-                    defaultSteps: defaultSteps);
-
-                await templateRepository.AddAsync(template, cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Skipping malformed API route JSON for connector {ConnectorId}",
-                    request.TenantConnectorId);
-            }
-        }
-
-        foreach (var wfJson in workflowTemplates)
+        foreach (var wfJson in workflowJsons)
         {
             try
             {
@@ -146,7 +129,65 @@ public sealed class GenerateConnectorAssetsCommandHandler(
         }
 
         return new GenerateConnectorAssetsResult(
-            JsonSerializer.Serialize(apiRoutes),
-            JsonSerializer.Serialize(workflowTemplates));
+            JsonSerializer.Serialize(apiOperationJsons),
+            JsonSerializer.Serialize(workflowJsons));
+    }
+
+    private List<TenantConnectorApi> BuildApiList(TenantConnector connector, List<string> operationJsons)
+    {
+        var baseUrl = ExtractBaseUrl(connector.Metadata);
+        List<TenantConnectorApi> apis = [];
+
+        foreach (var opJson in operationJsons)
+        {
+            try
+            {
+                var doc = JsonDocument.Parse(opJson).RootElement;
+                var method = doc.TryGetProperty("method", out var m) ? m.GetString() : "GET";
+                var path = doc.TryGetProperty("path", out var p) ? p.GetString() : string.Empty;
+
+                var urlTemplate = !string.IsNullOrEmpty(path) &&
+                                  path.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+                    ? path
+                    : $"{baseUrl}{path}";
+
+                apis.Add(TenantConnectorApi.Create(
+                    connector.Id,
+                    connector.TenantId,
+                    connector.ConnectorName,
+                    apiName: $"{method} {path}",
+                    httpMethod: method ?? "GET",
+                    urlTemplate: urlTemplate,
+                    metadata: opJson));
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Skipping malformed API operation JSON for connector {ConnectorId}",
+                    connector.Id);
+            }
+        }
+
+        // Deduplicate — Claude may return the same operation more than once
+        return apis
+            .GroupBy(a => a.ApiName, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.First())
+            .ToList();
+    }
+
+    /// <summary>
+    /// Extracts baseUrl from Claude-generated connector metadata.
+    /// Placeholder tokens (e.g. "{instance_url}") are kept as-is for later credential substitution.
+    /// </summary>
+    private static string ExtractBaseUrl(string metadata)
+    {
+        try
+        {
+            var doc = JsonDocument.Parse(metadata);
+            if (doc.RootElement.TryGetProperty("baseUrl", out var bu))
+                return (bu.GetString() ?? string.Empty).TrimEnd('/');
+        }
+        catch (JsonException) { }
+
+        return string.Empty;
     }
 }

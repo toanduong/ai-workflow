@@ -21,11 +21,12 @@ public class GenerateConnectorAssetsCommandHandlerTests
         _currentUserService.IsAuthenticated.Returns(true);
     }
 
+    // 3 api operations + 2 workflow templates
     private static readonly IReadOnlyList<AIToolCall> SampleToolCalls = new[]
     {
-        new AIToolCall("create_api_route", """{"method":"GET","path":"/apollo/contacts/search","description":"Search Apollo contacts"}"""),
-        new AIToolCall("create_api_route", """{"method":"POST","path":"/apollo/sequences/enroll","description":"Enroll contact in sequence"}"""),
-        new AIToolCall("create_api_route", """{"method":"GET","path":"/apollo/people/match","description":"Find matching people"}"""),
+        new AIToolCall("create_api_operation", """{"method":"GET","path":"/apollo/contacts/search","description":"Search Apollo contacts"}"""),
+        new AIToolCall("create_api_operation", """{"method":"POST","path":"/apollo/sequences/enroll","description":"Enroll contact in sequence"}"""),
+        new AIToolCall("create_api_operation", """{"method":"GET","path":"/apollo/people/match","description":"Find matching people"}"""),
         new AIToolCall("create_workflow_template", """{"name":"Apollo Lead Enrich","trigger":"webhook","steps":[],"description":"Enrich leads from Apollo"}"""),
         new AIToolCall("create_workflow_template", """{"name":"Apollo Sequence Trigger","trigger":"schedule","steps":[],"description":"Trigger Apollo sequences"}""")
     };
@@ -38,7 +39,7 @@ public class GenerateConnectorAssetsCommandHandlerTests
             NullLogger<GenerateConnectorAssetsCommandHandler>.Instance);
 
     [Fact]
-    public async Task Handle_ActiveApolloConnector_ReturnsApiRoutesAndWorkflows()
+    public async Task Handle_ActiveApolloConnector_SavesApiOperationsAndWorkflows()
     {
         var connector = new TenantConnectorBuilder()
             .WithConnectorName("Apollo")
@@ -59,16 +60,21 @@ public class GenerateConnectorAssetsCommandHandlerTests
         var result = await CreateHandler().Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value!.ApiRoutes.Should().NotBeEmpty();
-        result.Value.WorkflowDefs.Should().NotBeEmpty();
+        result.Value!.ApiRoutes.Should().NotBe("[]");
+        result.Value.WorkflowDefs.Should().NotBe("[]");
 
-        // 3 api routes + 2 workflow templates = 5 templates saved
-        await _templateRepository.Received(5).AddAsync(
+        // 3 API operations → TenantConnectorApis
+        await _repository.Received(1).AddApisAsync(
+            Arg.Is<IEnumerable<TenantConnectorApi>>(l => l.Count() == 3),
+            Arg.Any<CancellationToken>());
+
+        // 2 workflow templates → WorkflowTemplates
+        await _templateRepository.Received(2).AddAsync(
             Arg.Any<WorkflowTemplate>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Handle_ActiveConnector_SavesApiRoutesWithCorrectCategory()
+    public async Task Handle_ActiveConnector_SavesWorkflowsWithCorrectCategory()
     {
         var connector = new TenantConnectorBuilder()
             .WithConnectorName("Apollo")
@@ -88,12 +94,14 @@ public class GenerateConnectorAssetsCommandHandlerTests
         var command = new GenerateConnectorAssetsCommand(connector.Id.Value);
         await CreateHandler().Handle(command, CancellationToken.None);
 
-        await _templateRepository.Received(3).AddAsync(
-            Arg.Is<WorkflowTemplate>(t => t.Category == "Apollo/ApiRoute"),
-            Arg.Any<CancellationToken>());
-
+        // Only workflow templates go to WorkflowTemplates — all with Apollo/Workflow category
         await _templateRepository.Received(2).AddAsync(
             Arg.Is<WorkflowTemplate>(t => t.Category == "Apollo/Workflow"),
+            Arg.Any<CancellationToken>());
+
+        // API operations do NOT go to WorkflowTemplates
+        await _templateRepository.DidNotReceive().AddAsync(
+            Arg.Is<WorkflowTemplate>(t => t.Category == "Apollo/ApiRoute"),
             Arg.Any<CancellationToken>());
     }
 
@@ -177,5 +185,7 @@ public class GenerateConnectorAssetsCommandHandlerTests
         result.Error!.Code.Should().Be("TenantConnector.AssetGenerationFailed");
         await _templateRepository.DidNotReceive().AddAsync(
             Arg.Any<WorkflowTemplate>(), Arg.Any<CancellationToken>());
+        await _repository.DidNotReceive().AddApisAsync(
+            Arg.Any<IEnumerable<TenantConnectorApi>>(), Arg.Any<CancellationToken>());
     }
 }

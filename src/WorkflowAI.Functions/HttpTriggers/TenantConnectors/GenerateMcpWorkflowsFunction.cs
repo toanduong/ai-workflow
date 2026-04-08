@@ -10,7 +10,7 @@ public sealed class GenerateMcpWorkflowsFunction(IMediator mediator)
 {
     [Function("GenerateMcpWorkflows")]
     public async Task<HttpResponseData> Run(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "tenants/{tenantId}/connectors/{id}/generate")]
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "tenants/{tenantId}/connectors/{id}/generate-workflows")]
         HttpRequestData req,
         string tenantId,
         string id)

@@ -47,6 +47,7 @@ public class ValidateTenantConnectorCommandHandlerTests
 
         var httpClient = CreateMockHttpClient(HttpStatusCode.OK);
         var command = new ValidateTenantConnectorCommand(
+            connector.TenantId.Value,
             connector.Id.Value,
             new Dictionary<string, string> { ["api_key"] = "valid-apollo-api-key" });
 
@@ -72,6 +73,7 @@ public class ValidateTenantConnectorCommandHandlerTests
 
         var httpClient = CreateMockHttpClient(HttpStatusCode.Unauthorized);
         var command = new ValidateTenantConnectorCommand(
+            connector.TenantId.Value,
             connector.Id.Value,
             new Dictionary<string, string> { ["api_key"] = "invalid-key" });
 
@@ -101,6 +103,7 @@ public class ValidateTenantConnectorCommandHandlerTests
         var httpClient = CreateCapturingHttpClient(HttpStatusCode.OK, req => captured = req);
 
         var command = new ValidateTenantConnectorCommand(
+            connector.TenantId.Value,
             connector.Id.Value,
             new Dictionary<string, string> { ["token"] = "my-bearer-token" });
 
@@ -129,6 +132,7 @@ public class ValidateTenantConnectorCommandHandlerTests
         var httpClient = CreateCapturingHttpClient(HttpStatusCode.OK, req => captured = req);
 
         var command = new ValidateTenantConnectorCommand(
+            connector.TenantId.Value,
             connector.Id.Value,
             new Dictionary<string, string> { ["username"] = "user", ["password"] = "pass" });
 
@@ -149,6 +153,7 @@ public class ValidateTenantConnectorCommandHandlerTests
             .Returns((TenantConnector?)null);
 
         var command = new ValidateTenantConnectorCommand(
+            Guid.NewGuid(),
             Guid.NewGuid(),
             new Dictionary<string, string> { ["api_key"] = "any" });
 
@@ -173,6 +178,7 @@ public class ValidateTenantConnectorCommandHandlerTests
             .Returns(connector);
 
         var command = new ValidateTenantConnectorCommand(
+            connector.TenantId.Value,
             connector.Id.Value,
             new Dictionary<string, string> { ["api_key"] = "some-key" });
 
@@ -195,6 +201,7 @@ public class ValidateTenantConnectorCommandHandlerTests
             .Returns(connector);
 
         var command = new ValidateTenantConnectorCommand(
+            connector.TenantId.Value,
             connector.Id.Value,
             new Dictionary<string, string> { ["api_key"] = "any" });
 

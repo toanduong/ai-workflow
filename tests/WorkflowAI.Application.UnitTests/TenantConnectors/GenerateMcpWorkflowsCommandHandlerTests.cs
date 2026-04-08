@@ -18,35 +18,13 @@ public class GenerateMcpWorkflowsCommandHandlerTests
     private GenerateMcpWorkflowsCommandHandler CreateHandler() =>
         new(_repository, _anthropicService, NullLogger<GenerateMcpWorkflowsCommandHandler>.Instance);
 
-    // Claude returns structured JSON with named arrays — the canonical response shape
-    private static readonly string ValidClaudeResponse = """
-        {
-          "apiRoutes": [
-            {
-              "routeName": "connector/contacts-search",
-              "method": "POST",
-              "path": "/connectors/{connectorName}/contacts/search",
-              "description": "Search contacts by name or email"
-            },
-            {
-              "routeName": "connector/contacts-create",
-              "method": "POST",
-              "path": "/connectors/{connectorName}/contacts",
-              "description": "Create a new contact"
-            }
-          ],
-          "workflowTemplates": [
-            {
-              "templateName": "Sync New Contacts",
-              "description": "Periodically pull new contacts and store them locally",
-              "trigger": "schedule",
-              "steps": [
-                { "stepName": "FetchContacts", "routeName": "connector/contacts-search" }
-              ]
-            }
-          ]
-        }
-        """;
+    // Tool calls Claude returns — 2 api routes + 1 workflow template
+    private static readonly IReadOnlyList<AIToolCall> SampleToolCalls =
+    [
+        new AIToolCall("create_api_route", """{"routeName":"connector/contacts-search","method":"POST","path":"/connectors/{connectorName}/contacts/search","description":"Search contacts by name or email"}"""),
+        new AIToolCall("create_api_route", """{"routeName":"connector/contacts-create","method":"POST","path":"/connectors/{connectorName}/contacts","description":"Create a new contact"}"""),
+        new AIToolCall("create_workflow_template", """{"templateName":"Sync New Contacts","description":"Periodically pull new contacts and store them locally","trigger":"schedule","steps":[{"stepName":"FetchContacts","routeName":"connector/contacts-search"}]}""")
+    ];
 
     [Fact]
     public async Task Handle_ShouldReturnNotFound_WhenConnectorDoesNotExist()
@@ -92,7 +70,7 @@ public class GenerateMcpWorkflowsCommandHandlerTests
         _anthropicService.CompleteWithToolsAsync(
                 Arg.Any<string>(), Arg.Any<IReadOnlyList<AIToolDefinition>>(),
                 Arg.Any<string?>(), Arg.Any<CancellationToken>())
-            .Returns(new AICompletionResult(ValidClaudeResponse, 800, true));
+            .Returns(new AICompletionResult(string.Empty, 800, true, ToolCalls: SampleToolCalls));
 
         var result = await CreateHandler().Handle(
             new GenerateMcpWorkflowsCommand(connector.Id.Value), CancellationToken.None);
@@ -122,7 +100,7 @@ public class GenerateMcpWorkflowsCommandHandlerTests
         _anthropicService.CompleteWithToolsAsync(
                 Arg.Any<string>(), Arg.Any<IReadOnlyList<AIToolDefinition>>(),
                 Arg.Any<string?>(), Arg.Any<CancellationToken>())
-            .Returns(new AICompletionResult(ValidClaudeResponse, 800, true));
+            .Returns(new AICompletionResult(string.Empty, 800, true, ToolCalls: SampleToolCalls));
 
         await CreateHandler().Handle(
             new GenerateMcpWorkflowsCommand(connector.Id.Value), CancellationToken.None);
@@ -171,7 +149,7 @@ public class GenerateMcpWorkflowsCommandHandlerTests
         _anthropicService.CompleteWithToolsAsync(
                 Arg.Any<string>(), Arg.Any<IReadOnlyList<AIToolDefinition>>(),
                 Arg.Any<string?>(), Arg.Any<CancellationToken>())
-            .Returns(new AICompletionResult(ValidClaudeResponse, 800, true));
+            .Returns(new AICompletionResult(string.Empty, 800, true, ToolCalls: SampleToolCalls));
 
         var result = await CreateHandler().Handle(
             new GenerateMcpWorkflowsCommand(connector.Id.Value), CancellationToken.None);

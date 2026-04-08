@@ -28,8 +28,11 @@ public sealed class ValidateTenantConnectorCommandHandler(
         if (connector is null)
             return Error.NotFound("TenantConnector.NotFound", "Connector not found.");
 
+        if (connector.TenantId.Value != request.TenantId)
+            return Error.NotFound("TenantConnector.NotFound", "Connector not found.");
+
         var baseUrl = ResolveBaseUrl(connector.Metadata, request.Credentials);
-        var (testUrl, testMethod) = ExtractTestEndpoint(connector.Metadata, baseUrl);
+        var (testUrl, testMethod, testBody, testContentType) = ExtractTestEndpoint(connector.Metadata, baseUrl);
 
         if (string.IsNullOrEmpty(testUrl))
         {
@@ -46,6 +49,13 @@ public sealed class ValidateTenantConnectorCommandHandler(
         {
             var httpRequest = new HttpRequestMessage(new HttpMethod(testMethod), testUrl);
             applicator.Apply(httpRequest, request.Credentials);
+
+            if (testBody is not null)
+                httpRequest.Content = new StringContent(
+                    testBody,
+                    System.Text.Encoding.UTF8,
+                    testContentType ?? "application/json");
+
             response = await httpClient.SendAsync(httpRequest, ct);
         }
         catch (HttpRequestException ex)
@@ -105,29 +115,31 @@ public sealed class ValidateTenantConnectorCommandHandler(
             ?.TrimEnd('/') ?? string.Empty;
     }
 
-    private static (string Url, string Method) ExtractTestEndpoint(string metadata, string baseUrl)
+    private static (string Url, string Method, string? Body, string? ContentType) ExtractTestEndpoint(
+        string metadata, string baseUrl)
     {
         try
         {
             var doc = JsonDocument.Parse(metadata);
             if (doc.RootElement.TryGetProperty("testEndpoint", out var ep))
             {
-                var path   = ep.TryGetProperty("path",   out var p) ? p.GetString() : null;
-                var method = ep.TryGetProperty("method", out var m) ? m.GetString() : "GET";
+                var path        = ep.TryGetProperty("path",        out var p)  ? p.GetString()  : null;
+                var method      = ep.TryGetProperty("method",      out var m)  ? m.GetString()  : "GET";
+                var body        = ep.TryGetProperty("body",        out var b)  ? b.GetString()  : null;
+                var contentType = ep.TryGetProperty("contentType", out var ct) ? ct.GetString() : null;
 
                 if (!string.IsNullOrEmpty(path))
                 {
-                    // path may be a full URL (e.g. Bearer/OAuth connectors) or a relative path
                     var url = path.StartsWith("http", StringComparison.OrdinalIgnoreCase)
                         ? path
                         : $"{baseUrl}{path}";
-                    return (url, method?.ToUpperInvariant() ?? "GET");
+                    return (url, method?.ToUpperInvariant() ?? "GET", body, contentType);
                 }
             }
         }
         catch (JsonException) { }
 
-        return (baseUrl, "GET");
+        return (baseUrl, "GET", null, null);
     }
 
     private static string ExtractAuthType(string metadata)

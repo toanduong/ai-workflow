@@ -115,98 +115,19 @@ public sealed class GenerateMcpWorkflowsCommandHandler(
                 $"Claude failed to generate workflows: {aiResult.ErrorMessage}");
         }
 
-        var (apiRoutes, workflowDefs) = ParseToolCallResults(aiResult.Content);
+        var toolCalls = aiResult.ToolCalls ?? [];
+        var apiRoutes    = toolCalls.Where(t => t.ToolName == "create_api_route").Select(t => t.InputJson).ToList();
+        var workflowDefs = toolCalls.Where(t => t.ToolName == "create_workflow_template").Select(t => t.InputJson).ToList();
+
+        var apiRoutesJson    = JsonSerializer.Serialize(apiRoutes);
+        var workflowDefsJson = JsonSerializer.Serialize(workflowDefs);
 
         return new GenerateMcpWorkflowsResult(
             ConnectorName: connector.ConnectorName,
-            ApiRoutesCount: CountJsonArrayItems(apiRoutes),
-            WorkflowTemplatesCount: CountJsonArrayItems(workflowDefs),
-            ApiRoutes: apiRoutes,
-            WorkflowDefs: workflowDefs);
+            ApiRoutesCount: apiRoutes.Count,
+            WorkflowTemplatesCount: workflowDefs.Count,
+            ApiRoutes: apiRoutesJson,
+            WorkflowDefs: workflowDefsJson);
     }
 
-    /// <summary>
-    /// Parses the tool-call content from Claude.
-    /// The content is expected to be a JSON object with "apiRoutes" and "workflowTemplates" arrays,
-    /// or a raw array of tool calls that we split by tool name.
-    /// </summary>
-    private static (string ApiRoutes, string WorkflowDefs) ParseToolCallResults(string content)
-    {
-        var cleaned = StripMarkdownFences(content.Trim());
-
-        try
-        {
-            var doc = JsonDocument.Parse(cleaned);
-            var root = doc.RootElement;
-
-            // If Claude returned a structured object with named arrays
-            if (root.ValueKind == JsonValueKind.Object)
-            {
-                var routes = root.TryGetProperty("apiRoutes", out var r) ? r.GetRawText() : "[]";
-                var templates = root.TryGetProperty("workflowTemplates", out var t) ? t.GetRawText() : "[]";
-                return (routes, templates);
-            }
-
-            // If Claude returned a flat array of tool calls, split by tool name
-            if (root.ValueKind == JsonValueKind.Array)
-            {
-                var routes = new List<JsonElement>();
-                var templates = new List<JsonElement>();
-
-                foreach (var item in root.EnumerateArray())
-                {
-                    if (item.TryGetProperty("tool", out var tool))
-                    {
-                        var toolName = tool.GetString();
-                        if (toolName == "create_api_route" &&
-                            item.TryGetProperty("parameters", out var p))
-                            routes.Add(p);
-                        else if (toolName == "create_workflow_template" &&
-                                 item.TryGetProperty("parameters", out var tp))
-                            templates.Add(tp);
-                    }
-                    else
-                    {
-                        // Item is directly the route or template object — infer from shape
-                        if (item.TryGetProperty("routeName", out _))
-                            routes.Add(item);
-                        else if (item.TryGetProperty("templateName", out _))
-                            templates.Add(item);
-                    }
-                }
-
-                return (
-                    JsonSerializer.Serialize(routes),
-                    JsonSerializer.Serialize(templates));
-            }
-        }
-        catch (JsonException) { }
-
-        // Return the raw content as ApiRoutes if we cannot parse it, so the caller still has the data
-        return (cleaned, "[]");
-    }
-
-    private static string StripMarkdownFences(string content)
-    {
-        if (content.StartsWith("```"))
-        {
-            var firstNewline = content.IndexOf('\n');
-            var lastFence = content.LastIndexOf("```");
-            if (firstNewline > 0 && lastFence > firstNewline)
-                return content[(firstNewline + 1)..lastFence].Trim();
-        }
-        return content;
-    }
-
-    private static int CountJsonArrayItems(string json)
-    {
-        try
-        {
-            var doc = JsonDocument.Parse(json);
-            return doc.RootElement.ValueKind == JsonValueKind.Array
-                ? doc.RootElement.GetArrayLength()
-                : 0;
-        }
-        catch { return 0; }
-    }
 }
