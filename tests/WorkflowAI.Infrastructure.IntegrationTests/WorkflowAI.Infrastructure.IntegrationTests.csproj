@@ -24,4 +24,12 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <!-- Copy local.settings.json from the Functions project so tests can read it at runtime -->
+  <ItemGroup>
+    <Content Include="..\..\src\WorkflowAI.Functions\local.settings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>local.settings.json</Link>
+    </Content>
+  </ItemGroup>
+
 </Project>
