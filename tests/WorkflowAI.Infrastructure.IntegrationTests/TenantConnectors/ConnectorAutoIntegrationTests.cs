@@ -1,4 +1,6 @@
 using Anthropic.SDK;
+using Azure.Identity;
+using Azure.Security.KeyVault.Secrets;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
@@ -20,27 +22,37 @@ using WorkflowAI.Infrastructure.Persistence.EntityFramework.Repositories;
 namespace WorkflowAI.Infrastructure.IntegrationTests.TenantConnectors;
 
 /// <summary>
-/// Real integration tests — uses actual PostgreSQL + actual Claude API.
+/// Generic end-to-end integration test for ANY connector.
+/// Driven entirely by local.settings.json — no code changes needed per connector.
 ///
 /// Prerequisites:
-///   1. Docker postgres running:  docker-compose up -d postgres
-///   2. Anthropic API key set in src/WorkflowAI.Functions/local.settings.json
-///      under Anthropic:ApiKey  (or env var ANTHROPIC_API_KEY)
-///   3. (Optional) For validate test: set ODOO_INSTANCE_URL + ODOO_API_KEY env vars
+///   1. Docker postgres OR Azure PostgreSQL connection string in local.settings.json
+///   2. Anthropic API key in local.settings.json under Anthropic:ApiKey
+///   3. Connector config in local.settings.json:
+///        "Connector": {
+///          "Name": "HubSpot",
+///          "Credentials": "{\"access_token\": \"pat-na1-xxx\"}"
+///        }
+///      → Change Name + Credentials to test a different connector.
+///      → Credentials keys must match the requiredFields Claude returns in Provision.
+///   4. (Optional) Key Vault URI for real credential storage:
+///        "KeyVault": { "Uri": "https://banhanhapp-dev.vault.azure.net/" }
+///      → Run `az login` first so DefaultAzureCredential can authenticate.
+///      → Without URI, NoOpKeyVaultService is used (credentials not persisted to KV).
+///
+/// Data is kept in the database after tests run — inspect rows for debugging.
 /// </summary>
-public class OdooConnectorIntegrationTests : IAsyncLifetime
+public class ConnectorAutoIntegrationTests : IAsyncLifetime
 {
     // ── Config — reads local.settings.json, falls back to env vars ────────────
     private static class TestConfig
     {
         private static readonly Lazy<JsonDocument?> _localSettings = new(() =>
         {
-            // Walk up from test binary to find local.settings.json
             var dir = new DirectoryInfo(AppContext.BaseDirectory);
             while (dir != null)
             {
-                var file = Path.Combine(dir.FullName,
-                    "src", "WorkflowAI.Functions", "local.settings.json");
+                var file = Path.Combine(dir.FullName, "src", "WorkflowAI.Functions", "local.settings.json");
                 if (File.Exists(file))
                     return JsonDocument.Parse(File.ReadAllText(file));
                 dir = dir.Parent;
@@ -54,9 +66,8 @@ public class OdooConnectorIntegrationTests : IAsyncLifetime
             {
                 var doc = _localSettings.Value;
                 if (doc is null) return null;
-                var parts = path.Split(':');
                 JsonElement el = doc.RootElement;
-                foreach (var part in parts)
+                foreach (var part in path.Split(':'))
                     if (!el.TryGetProperty(part, out el)) return null;
                 return el.GetString();
             }
@@ -74,51 +85,53 @@ public class OdooConnectorIntegrationTests : IAsyncLifetime
             ?? string.Empty;
 
         /// <summary>
-        /// A JSON object whose keys match the connector's Claude-generated requiredFields.
-        /// Set CONNECTOR_CREDENTIALS env var or local.settings.json "Connector:Credentials".
-        ///
-        /// Examples:
-        ///   Apollo (SaaS, fixed URL):
-        ///     { "api_key": "your-apollo-key" }
-        ///
-        ///   Odoo (self-hosted, URL per tenant):
-        ///     { "api_key": "your-odoo-key", "instance_url": "https://mycompany.odoo.com" }
-        ///
-        ///   Chatwoot (self-hosted):
-        ///     { "access_token": "your-token", "base_url": "https://chatwoot.mycompany.com" }
+        /// The connector to test. Change "Connector:Name" in local.settings.json to switch connectors.
         /// </summary>
-        public static IReadOnlyDictionary<string, string>? ConnectorCredentials()
-        {
-            var json = Environment.GetEnvironmentVariable("CONNECTOR_CREDENTIALS")
-                       ?? LocalSetting("Connector:Credentials");
-            if (json is null) return null;
-            try { return System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(json); }
-            catch { return null; }
-        }
-
-        /// <summary>Which connector name to test the full flow against.</summary>
         public static string ConnectorName =>
             Environment.GetEnvironmentVariable("CONNECTOR_NAME")
             ?? LocalSetting("Connector:Name")
             ?? "Odoo";
+
+        /// <summary>
+        /// JSON object whose keys match the connector's Claude-generated requiredFields.
+        /// Run Provision first to discover what keys are needed, then fill this in.
+        ///
+        /// Examples:
+        ///   HubSpot:   {"access_token":"pat-na1-xxx"}
+        ///   Apollo:    {"api_key":"your-key"}
+        ///   Odoo:      {"api_key":"your-key","instance_url":"https://mycompany.odoo.com"}
+        ///   Chatwoot:  {"access_token":"your-token","base_url":"https://chatwoot.example.com"}
+        /// </summary>
+        public static IReadOnlyDictionary<string, string>? ConnectorCredentials()
+        {
+            // Env var override — flat JSON object e.g. {"access_token":"xxx"}
+            var json = Environment.GetEnvironmentVariable("CONNECTOR_CREDENTIALS")
+                       // Per-connector entry in local.settings.json: Connector:Credentials:{Name}
+                       ?? LocalSetting($"Connector:Credentials:{ConnectorName}");
+            if (json is null) return null;
+            try { return JsonSerializer.Deserialize<Dictionary<string, string>>(json); }
+            catch { return null; }
+        }
+
+        public static string? KeyVaultUri =>
+            Environment.GetEnvironmentVariable("KEY_VAULT_URI")
+            ?? LocalSetting("KeyVault:Uri");
     }
 
     // ── Real dependencies ──────────────────────────────────────────────────
     private WorkflowAIDbContext _db = null!;
     private SqlTenantConnectorRepository _repository = null!;
     private AnthropicService _anthropicService = null!;
+    private IKeyVaultService _keyVaultService = null!;
 
-    // ── Setup ─────────────────────────────────────────────────────────────
     public async Task InitializeAsync()
     {
-        // Real PostgreSQL
         var options = new DbContextOptionsBuilder<WorkflowAIDbContext>()
             .UseNpgsql(TestConfig.ConnectionString)
             .Options;
         _db = new WorkflowAIDbContext(options);
         _repository = new SqlTenantConnectorRepository(_db);
 
-        // Real Anthropic Claude
         var anthropicOptions = Options.Create(new AnthropicOptions
         {
             ApiKey = TestConfig.AnthropicApiKey,
@@ -130,77 +143,83 @@ public class OdooConnectorIntegrationTests : IAsyncLifetime
             chatClient, anthropicOptions,
             NullLogger<AnthropicService>.Instance);
 
+        // Use real Key Vault if URI is configured; otherwise NoOp (credentials not persisted)
+        var kvUri = TestConfig.KeyVaultUri;
+        _keyVaultService = !string.IsNullOrEmpty(kvUri)
+            ? new KeyVaultService(new SecretClient(new Uri(kvUri), new DefaultAzureCredential()))
+            : new NoOpKeyVaultService();
+
         await Task.CompletedTask;
     }
 
-    // ── Teardown: data is kept in the database for inspection ─────────────
     public async Task DisposeAsync()
     {
         await _db.DisposeAsync();
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Test 1: Provision — real Claude generates metadata for any connector name
+    // Test 1: Provision only — verifies Claude generates valid metadata for any connector name.
+    //         Run this first to discover what requiredFields the connector needs,
+    //         then fill in local.settings.json Connector:Credentials accordingly.
     // ─────────────────────────────────────────────────────────────────────────
-    [Theory]
-    [InlineData("Odoo")]
-    [InlineData("Apollo")]
-    [InlineData("HubSpot")]
-    [InlineData("Chatwoot")]
-    [InlineData("Salesforce")]
-    public async Task Provision_ShouldSaveClaudeGeneratedMetadataToDatabase(string connectorName)
+    [Fact]
+    public async Task Step1_Provision_ReturnsRequiredFieldsAndSavesToDatabase()
     {
         SkipIfNoApiKey();
 
         var tenantId = Guid.NewGuid();
+        var connectorName = TestConfig.ConnectorName;
         var handler = new ProvisionTenantConnectorCommandHandler(_repository, _anthropicService);
 
-        // Act — calls REAL Claude API; no code change needed per connector
         var result = await handler.Handle(
             new ProvisionTenantConnectorCommand(tenantId, connectorName),
             CancellationToken.None);
 
-        // Assert — result is generic: we only care that Claude returned structured metadata
         result.IsSuccess.Should().BeTrue(
-            $"Claude should return valid metadata for '{connectorName}', " +
-            $"but got error: {result.Error?.Code} — {result.Error?.Message}");
+            $"Claude should return valid metadata for '{connectorName}': " +
+            $"{result.Error?.Code} — {result.Error?.Message}");
+
         result.Value!.ConnectorName.Should().Be(connectorName);
         result.Value.Metadata.Should().NotBeNullOrEmpty();
         result.Value.Info.Should().NotBeNullOrEmpty();
 
-        // Metadata must contain the generic schema fields
+        // Metadata must contain generic schema fields
         result.Value.Metadata.Should().ContainAny("APIKey", "OAuth2", "Basic", "Bearer");
         result.Value.Metadata.Should().Contain("testEndpoint");
         result.Value.Metadata.Should().Contain("baseUrl");
+        result.Value.Metadata.Should().Contain("requiredFields");
 
-        // Assert — actually saved to PostgreSQL
         var saved = await _repository.GetByIdAsync(
             TenantConnectorId.From(result.Value.TenantConnectorId));
         saved.Should().NotBeNull();
         saved!.ConnectorName.Should().Be(connectorName);
         saved.Status.Should().Be(TenantConnectorStatus.Pending);
-        saved.Metadata.Should().Be(result.Value.Metadata);
+
+        // Print requiredFields so you know what to put in Connector:Credentials
+        var metadata = JsonDocument.Parse(saved.Metadata);
+        if (metadata.RootElement.TryGetProperty("requiredFields", out var fields))
+            Console.WriteLine($"\n>>> requiredFields for {connectorName}: {fields}");
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Test 2: Provision twice — conflict check (connector name is arbitrary)
+    // Test 2: Provision twice with same tenant → conflict
     // ─────────────────────────────────────────────────────────────────────────
     [Fact]
-    public async Task Provision_Twice_ShouldReturnConflict()
+    public async Task Step1_Provision_Twice_ShouldReturnConflict()
     {
         SkipIfNoApiKey();
 
         var tenantId = Guid.NewGuid();
+        var connectorName = TestConfig.ConnectorName;
         var handler = new ProvisionTenantConnectorCommandHandler(_repository, _anthropicService);
 
         var first = await handler.Handle(
-            new ProvisionTenantConnectorCommand(tenantId, "Apollo"),
+            new ProvisionTenantConnectorCommand(tenantId, connectorName),
             CancellationToken.None);
         first.IsSuccess.Should().BeTrue();
 
-        // Same tenant + same connector name → conflict
         var second = await handler.Handle(
-            new ProvisionTenantConnectorCommand(tenantId, "Apollo"),
+            new ProvisionTenantConnectorCommand(tenantId, connectorName),
             CancellationToken.None);
 
         second.IsFailure.Should().BeTrue();
@@ -208,37 +227,36 @@ public class OdooConnectorIntegrationTests : IAsyncLifetime
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Test 4: Full flow — Provision + Validate (requires real Odoo instance)
-    //         Set ODOO_INSTANCE_URL + ODOO_API_KEY env vars to run this test
-    // ─────────────────────────────────────────────────────────────────────────
-    // ─────────────────────────────────────────────────────────────────────────
-    // Test 4: Full flow — Provision + Validate (requires real connector credentials)
+    // Test 3: Full flow — Provision → Validate → GenerateAssets
     //
-    // Configure via environment variables or local.settings.json:
-    //   CONNECTOR_NAME        → connector to test (e.g. "Odoo", "Apollo", "HubSpot")
-    //   CONNECTOR_CREDENTIALS → JSON object with keys matching requiredFields, e.g.
-    //                           Apollo:   {"api_key":"your-key"}
-    //                           Odoo:     {"api_key":"your-key","instance_url":"https://mycompany.odoo.com"}
-    //                           Chatwoot: {"access_token":"your-token","base_url":"https://chatwoot.example.com"}
+    // Configure local.settings.json:
+    //   "Connector": {
+    //     "Name": "HubSpot",
+    //     "Credentials": "{\"access_token\":\"pat-na1-xxx\"}"
+    //   }
+    //
+    // If Connector:Credentials is not set, this test is skipped gracefully.
     // ─────────────────────────────────────────────────────────────────────────
     [Fact]
-    public async Task FullFlow_Provision_Then_Validate_Connector()
+    public async Task FullFlow_Provision_Validate_GenerateAssets()
     {
         SkipIfNoApiKey();
 
         var credentials = TestConfig.ConnectorCredentials();
         if (credentials is null || credentials.Count == 0)
         {
-            // Skip gracefully — no connector credentials configured
+            Console.WriteLine(
+                "Skipping full flow — set Connector:Credentials in local.settings.json. " +
+                "Run Step1_Provision_ReturnsRequiredFieldsAndSavesToDatabase first to discover requiredFields.");
             return;
         }
 
         var connectorName = TestConfig.ConnectorName;
         var tenantId = Guid.NewGuid();
 
-        // Step 1 — Provision: Claude generates metadata + requiredFields for this connector
-        var provisionHandler = new ProvisionTenantConnectorCommandHandler(
-            _repository, _anthropicService);
+        // ── Step 1: Provision ─────────────────────────────────────────────
+        // Claude generates: authType, baseUrl, testEndpoint, requiredFields, configSchema
+        var provisionHandler = new ProvisionTenantConnectorCommandHandler(_repository, _anthropicService);
 
         var provision = await provisionHandler.Handle(
             new ProvisionTenantConnectorCommand(tenantId, connectorName),
@@ -246,10 +264,17 @@ public class OdooConnectorIntegrationTests : IAsyncLifetime
 
         provision.IsSuccess.Should().BeTrue(
             $"Provision failed: {provision.Error?.Code} — {provision.Error?.Message}");
+
         var connectorId = provision.Value!.TenantConnectorId;
 
-        // Step 2 — Validate: test real HTTP connection
-        // Credentials are passed as-is; the handler resolves baseUrl and auth from Claude-generated metadata.
+        // Print what Claude decided — useful for debugging
+        Console.WriteLine($"\n>>> Connector: {connectorName}");
+        Console.WriteLine($">>> Metadata: {provision.Value.Metadata}");
+        Console.WriteLine($">>> requiredFields filled: {JsonSerializer.Serialize(credentials.Keys)}");
+
+        // ── Step 2: Validate ──────────────────────────────────────────────
+        // User-supplied credentials are tested against the real API.
+        // On success: credentials stored in Key Vault, connector status → Active.
         ICredentialApplicatorFactory applicatorFactory = new CredentialApplicatorFactory(
         [
             new ApiKeyCredentialApplicator(),
@@ -263,7 +288,7 @@ public class OdooConnectorIntegrationTests : IAsyncLifetime
         currentUser.IsAuthenticated.Returns(true);
 
         var validateHandler = new ValidateTenantConnectorCommandHandler(
-            _repository, applicatorFactory, new NoOpKeyVaultService(), currentUser,
+            _repository, applicatorFactory, _keyVaultService, currentUser,
             NullLogger<ValidateTenantConnectorCommandHandler>.Instance,
             new HttpClient());
 
@@ -271,15 +296,22 @@ public class OdooConnectorIntegrationTests : IAsyncLifetime
             new ValidateTenantConnectorCommand(tenantId, connectorId, credentials),
             CancellationToken.None);
 
-        validate.IsSuccess.Should().BeTrue();
+        validate.IsSuccess.Should().BeTrue(
+            $"Validation failed — check Connector:Credentials in local.settings.json");
         validate.Value.Should().BeTrue(
-            "Connector credentials should be valid — check CONNECTOR_CREDENTIALS env var");
+            "HTTP test call to the connector API returned non-2xx — credentials may be invalid");
 
-        // Assert Table 1 status = Active
-        var connector = await _repository.GetByIdAsync(TenantConnectorId.From(connectorId));
-        connector!.Status.Should().Be(TenantConnectorStatus.Active);
+        // Connector is now Active; CredentialSecretNames mapped to Key Vault
+        var activeConnector = await _repository.GetByIdAsync(TenantConnectorId.From(connectorId));
+        activeConnector!.Status.Should().Be(TenantConnectorStatus.Active);
+        activeConnector.CredentialSecretNames.Should().NotBeNullOrEmpty(
+            "Secret names must be persisted so workflow steps can resolve credentials at runtime");
 
-        // Step 3 — GenerateConnectorAssets: Claude discovers API operations → TenantConnectorApis only
+        Console.WriteLine($">>> CredentialSecretNames: {activeConnector.CredentialSecretNames}");
+
+        // ── Step 3: Generate Assets ───────────────────────────────────────
+        // Claude reads stored metadata + info → discovers all API operations.
+        // Each operation (method + path) is saved to TenantConnectorApis.
         var generateHandler = new GenerateConnectorAssetsCommandHandler(
             _repository, _anthropicService, currentUser,
             NullLogger<GenerateConnectorAssetsCommandHandler>.Instance);
@@ -290,16 +322,20 @@ public class OdooConnectorIntegrationTests : IAsyncLifetime
         generate.IsSuccess.Should().BeTrue(
             $"GenerateConnectorAssets failed: {generate.Error?.Code} — {generate.Error?.Message}");
         generate.Value!.ApiRoutes.Should().NotBe("[]",
-            "Claude should have returned at least one API operation");
+            "Claude should discover at least one API operation");
 
-        // Assert TenantConnectorApis rows were saved (SRP: operations go here, not WorkflowTemplates)
+        // TenantConnectorApis rows must be saved
         var apis = await _repository.GetApisByConnectorAsync(TenantConnectorId.From(connectorId));
-        apis.Should().NotBeEmpty("TenantConnectorApis must be populated by GenerateConnectorAssets");
+        apis.Should().NotBeEmpty("TenantConnectorApis must be populated");
         apis.Should().AllSatisfy(api =>
         {
             api.HttpMethod.Should().NotBeNullOrEmpty();
             api.UrlTemplate.Should().NotBeNullOrEmpty();
         });
+
+        Console.WriteLine($">>> Discovered {apis.Count} API operations for {connectorName}:");
+        foreach (var api in apis.Take(10))
+            Console.WriteLine($"    {api.HttpMethod} {api.UrlTemplate}");
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────
@@ -307,14 +343,8 @@ public class OdooConnectorIntegrationTests : IAsyncLifetime
     {
         if (string.IsNullOrEmpty(TestConfig.AnthropicApiKey))
             throw new SkipException(
-                "Set ANTHROPIC_API_KEY environment variable to run integration tests.");
+                "Set ANTHROPIC_API_KEY or Anthropic:ApiKey in local.settings.json to run integration tests.");
     }
-}
-
-/// <summary>Minimal IHttpClientFactory for integration tests.</summary>
-internal sealed class RealHttpClientFactory : IHttpClientFactory
-{
-    public HttpClient CreateClient(string name) => new();
 }
 
 /// <summary>Signals xUnit to skip a test gracefully.</summary>

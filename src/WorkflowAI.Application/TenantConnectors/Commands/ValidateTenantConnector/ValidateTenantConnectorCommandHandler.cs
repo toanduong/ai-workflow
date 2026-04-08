@@ -72,8 +72,8 @@ public sealed class ValidateTenantConnectorCommandHandler(
             return false;
         }
 
-        await StoreCredentialsAsync(connector, request.Credentials, ct);
-        connector.Activate();
+        var secretNames = await StoreCredentialsAsync(connector, request.Credentials, ct);
+        connector.Activate(secretNames);
         await repository.UpdateAsync(connector, ct);
 
         logger.LogInformation("Connector {ConnectorName} validated successfully", connector.ConnectorName);
@@ -154,7 +154,7 @@ public sealed class ValidateTenantConnectorCommandHandler(
         return "APIKey";
     }
 
-    private async Task StoreCredentialsAsync(
+    private async Task<Dictionary<string, string>> StoreCredentialsAsync(
         TenantConnector connector,
         IReadOnlyDictionary<string, string> credentials,
         CancellationToken ct)
@@ -174,5 +174,6 @@ public sealed class ValidateTenantConnectorCommandHandler(
                     field, connector.Id.Value);
             }
         }
+        return secretNames;
     }
 }
