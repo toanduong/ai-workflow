@@ -15,7 +15,7 @@ public sealed class ListTenantConnectorsQueryHandler(ITenantConnectorRepository 
         var dtos = connectors.Select(c => new TenantConnectorDto(
             c.Id.Value,
             c.TenantId.Value,
-            c.ConnectorName,
+            c.ConnectorType,
             c.Metadata,
             c.Info,
             c.Status.Name,

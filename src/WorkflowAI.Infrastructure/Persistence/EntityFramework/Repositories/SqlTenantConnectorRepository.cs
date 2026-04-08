@@ -23,13 +23,13 @@ public sealed class SqlTenantConnectorRepository(WorkflowAIDbContext context)
         => await context.TenantConnectors
             .FirstOrDefaultAsync(c =>
                 c.TenantId == tenantId &&
-                c.ConnectorName == connectorName, ct);
+                c.ConnectorType == connectorName, ct);
 
     public async Task<IReadOnlyList<TenantConnector>> GetByTenantAsync(
         TenantId tenantId, CancellationToken ct = default)
         => await context.TenantConnectors
             .Where(c => c.TenantId == tenantId)
-            .OrderBy(c => c.ConnectorName)
+            .OrderBy(c => c.ConnectorType)
             .ToListAsync(ct);
 
     public async Task UpdateAsync(TenantConnector connector, CancellationToken ct = default)

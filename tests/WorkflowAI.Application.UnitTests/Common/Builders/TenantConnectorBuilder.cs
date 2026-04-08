@@ -47,7 +47,7 @@ public sealed class TenantConnectorBuilder
         return this;
     }
 
-    public TenantConnectorBuilder WithConnectorName(string name)
+    public TenantConnectorBuilder WithConnectorType(string name)
     {
         _connectorName = name;
         return this;

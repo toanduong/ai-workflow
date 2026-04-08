@@ -22,7 +22,7 @@ public sealed class TenantConnectorApi : Entity<TenantConnectorApiId>
 {
     public TenantConnectorId TenantConnectorId { get; private set; }
     public TenantId TenantId { get; private set; }
-    public string ConnectorName { get; private set; } = string.Empty;  // FK ref: same as TenantConnector.ConnectorName
+    public string ConnectorType { get; private set; } = string.Empty;  // FK ref: same as TenantConnector.ConnectorType
     public string ApiName { get; private set; } = string.Empty;        // e.g. "res.partner/list", "sale.order/create"
     public string HttpMethod { get; private set; } = string.Empty;     // GET | POST | PUT | DELETE | PATCH
     public string UrlTemplate { get; private set; } = string.Empty;    // e.g. "https://{odoo_instance}/api/res.partner"
@@ -34,7 +34,7 @@ public sealed class TenantConnectorApi : Entity<TenantConnectorApiId>
     public static TenantConnectorApi Create(
         TenantConnectorId tenantConnectorId,
         TenantId tenantId,
-        string connectorName,
+        string connectorType,
         string apiName,
         string httpMethod,
         string urlTemplate,
@@ -45,7 +45,7 @@ public sealed class TenantConnectorApi : Entity<TenantConnectorApiId>
             Id = TenantConnectorApiId.New(),
             TenantConnectorId = tenantConnectorId,
             TenantId = tenantId,
-            ConnectorName = connectorName,
+            ConnectorType = connectorType,
             ApiName = apiName,
             HttpMethod = httpMethod.ToUpperInvariant(),
             UrlTemplate = urlTemplate,

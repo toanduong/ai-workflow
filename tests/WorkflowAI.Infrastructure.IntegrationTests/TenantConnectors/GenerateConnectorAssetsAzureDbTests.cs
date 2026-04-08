@@ -112,8 +112,10 @@ public class GenerateConnectorAssetsAzureDbTests : IAsyncLifetime
         var currentUser = Substitute.For<ICurrentUserService>();
         currentUser.IsAuthenticated.Returns(true);
 
+        var options = Options.Create(new ConnectorAssetGenerationOptions());
+
         _handler = new GenerateConnectorAssetsCommandHandler(
-            _connectorRepository, anthropicService, currentUser,
+            _connectorRepository, anthropicService, currentUser, options,
             NullLogger<GenerateConnectorAssetsCommandHandler>.Instance);
     }
 
@@ -202,7 +204,7 @@ public class GenerateConnectorAssetsAzureDbTests : IAsyncLifetime
 
         result.IsSuccess.Should().BeTrue();
 
-        var workflowCategory = $"{_apolloConnector.ConnectorName}/Workflow";
+        var workflowCategory = $"{_apolloConnector.ConnectorType}/Workflow";
         var savedWorkflows = await _db.Templates
             .Where(t => t.Category == workflowCategory)
             .ToListAsync();

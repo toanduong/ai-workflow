@@ -76,7 +76,7 @@ public sealed class ValidateTenantConnectorCommandHandler(
         connector.Activate(secretNames);
         await repository.UpdateAsync(connector, ct);
 
-        logger.LogInformation("Connector {ConnectorName} validated successfully", connector.ConnectorName);
+        logger.LogInformation("Connector {ConnectorType} validated successfully", connector.ConnectorType);
         return true;
     }
 

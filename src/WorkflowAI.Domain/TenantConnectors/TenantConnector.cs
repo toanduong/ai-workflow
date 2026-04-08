@@ -12,11 +12,12 @@ namespace WorkflowAI.Domain.TenantConnectors;
 public sealed class TenantConnector : AggregateRoot<TenantConnectorId>
 {
     public TenantId TenantId { get; private set; }
-    public string ConnectorName { get; private set; } = string.Empty;
+    public string ConnectorType { get; private set; } = string.Empty;
     public string Metadata { get; private set; } = string.Empty;       // Claude-generated: authType, requiredFields, baseUrl, testEndpoint, configSchema
     public string Info { get; private set; } = string.Empty;           // Claude-generated: description, docsUrl, capabilities, rateLimits
     public TenantConnectorStatus Status { get; private set; } = TenantConnectorStatus.Pending;
     public string? FailureReason { get; private set; }
+    public int Version { get; private set; } = 1;
 
     /// <summary>
     /// JSON dict mapping each credential field name → its Key Vault secret name.
@@ -28,17 +29,17 @@ public sealed class TenantConnector : AggregateRoot<TenantConnectorId>
 
     private TenantConnector() { }
 
-    public static TenantConnector Create(TenantId tenantId, string connectorName)
+    public static TenantConnector Create(TenantId tenantId, string connectorType)
     {
         var connector = new TenantConnector
         {
             Id = TenantConnectorId.New(),
             TenantId = tenantId,
-            ConnectorName = connectorName,
+            ConnectorType = connectorType,
             Status = TenantConnectorStatus.Pending,
             CreatedAt = DateTime.UtcNow
         };
-        connector.RaiseDomainEvent(new TenantConnectorProvisionedEvent(connector.Id, tenantId, connectorName));
+        connector.RaiseDomainEvent(new TenantConnectorProvisionedEvent(connector.Id, tenantId, connectorType));
         return connector;
     }
 
@@ -60,7 +61,7 @@ public sealed class TenantConnector : AggregateRoot<TenantConnectorId>
         if (credentialSecretNames is { Count: > 0 })
             CredentialSecretNames = JsonSerializer.Serialize(credentialSecretNames);
         UpdatedAt = DateTime.UtcNow;
-        RaiseDomainEvent(new TenantConnectorActivatedEvent(Id, TenantId, ConnectorName));
+        RaiseDomainEvent(new TenantConnectorActivatedEvent(Id, TenantId, ConnectorType));
     }
 
     public void MarkFailed(string reason)

@@ -87,7 +87,7 @@ public class ConnectorAutoIntegrationTests : IAsyncLifetime
         /// <summary>
         /// The connector to test. Change "Connector:Name" in local.settings.json to switch connectors.
         /// </summary>
-        public static string ConnectorName =>
+        public static string ConnectorType =>
             Environment.GetEnvironmentVariable("CONNECTOR_NAME")
             ?? LocalSetting("Connector:Name")
             ?? "Odoo";
@@ -107,7 +107,7 @@ public class ConnectorAutoIntegrationTests : IAsyncLifetime
             // Env var override — flat JSON object e.g. {"access_token":"xxx"}
             var json = Environment.GetEnvironmentVariable("CONNECTOR_CREDENTIALS")
                        // Per-connector entry in local.settings.json: Connector:Credentials:{Name}
-                       ?? LocalSetting($"Connector:Credentials:{ConnectorName}");
+                       ?? LocalSetting($"Connector:Credentials:{ConnectorType}");
             if (json is null) return null;
             try { return JsonSerializer.Deserialize<Dictionary<string, string>>(json); }
             catch { return null; }
@@ -168,7 +168,7 @@ public class ConnectorAutoIntegrationTests : IAsyncLifetime
         SkipIfNoApiKey();
 
         var tenantId = Guid.NewGuid();
-        var connectorName = TestConfig.ConnectorName;
+        var connectorName = TestConfig.ConnectorType;
         var handler = new ProvisionTenantConnectorCommandHandler(_repository, _anthropicService);
 
         var result = await handler.Handle(
@@ -179,7 +179,7 @@ public class ConnectorAutoIntegrationTests : IAsyncLifetime
             $"Claude should return valid metadata for '{connectorName}': " +
             $"{result.Error?.Code} — {result.Error?.Message}");
 
-        result.Value!.ConnectorName.Should().Be(connectorName);
+        result.Value!.ConnectorType.Should().Be(connectorName);
         result.Value.Metadata.Should().NotBeNullOrEmpty();
         result.Value.Info.Should().NotBeNullOrEmpty();
 
@@ -192,7 +192,7 @@ public class ConnectorAutoIntegrationTests : IAsyncLifetime
         var saved = await _repository.GetByIdAsync(
             TenantConnectorId.From(result.Value.TenantConnectorId));
         saved.Should().NotBeNull();
-        saved!.ConnectorName.Should().Be(connectorName);
+        saved!.ConnectorType.Should().Be(connectorName);
         saved.Status.Should().Be(TenantConnectorStatus.Pending);
 
         // Print requiredFields so you know what to put in Connector:Credentials
@@ -210,7 +210,7 @@ public class ConnectorAutoIntegrationTests : IAsyncLifetime
         SkipIfNoApiKey();
 
         var tenantId = Guid.NewGuid();
-        var connectorName = TestConfig.ConnectorName;
+        var connectorName = TestConfig.ConnectorType;
         var handler = new ProvisionTenantConnectorCommandHandler(_repository, _anthropicService);
 
         var first = await handler.Handle(
@@ -251,7 +251,7 @@ public class ConnectorAutoIntegrationTests : IAsyncLifetime
             return;
         }
 
-        var connectorName = TestConfig.ConnectorName;
+        var connectorName = TestConfig.ConnectorType;
         var tenantId = Guid.NewGuid();
 
         // ── Step 1: Provision ─────────────────────────────────────────────
@@ -312,8 +312,9 @@ public class ConnectorAutoIntegrationTests : IAsyncLifetime
         // ── Step 3: Generate Assets ───────────────────────────────────────
         // Claude reads stored metadata + info → discovers all API operations.
         // Each operation (method + path) is saved to TenantConnectorApis.
+        var options = Options.Create(new ConnectorAssetGenerationOptions());
         var generateHandler = new GenerateConnectorAssetsCommandHandler(
-            _repository, _anthropicService, currentUser,
+            _repository, _anthropicService, currentUser, options,
             NullLogger<GenerateConnectorAssetsCommandHandler>.Instance);
 
         var generate = await generateHandler.Handle(

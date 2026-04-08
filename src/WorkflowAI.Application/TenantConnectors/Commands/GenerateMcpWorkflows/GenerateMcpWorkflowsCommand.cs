@@ -8,7 +8,7 @@ public sealed record GenerateMcpWorkflowsCommand(
 ) : IRequest<Result<GenerateMcpWorkflowsResult>>;
 
 public sealed record GenerateMcpWorkflowsResult(
-    string ConnectorName,
+    string ConnectorType,
     int ApiRoutesCount,
     int WorkflowTemplatesCount,
     string ApiRoutes,       // JSON array of generated API route definitions

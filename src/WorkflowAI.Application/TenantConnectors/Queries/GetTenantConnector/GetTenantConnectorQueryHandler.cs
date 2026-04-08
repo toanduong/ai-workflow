@@ -19,7 +19,7 @@ public sealed class GetTenantConnectorQueryHandler(ITenantConnectorRepository re
         return new TenantConnectorDto(
             connector.Id.Value,
             connector.TenantId.Value,
-            connector.ConnectorName,
+            connector.ConnectorType,
             connector.Metadata,
             connector.Info,
             connector.Status.Name,

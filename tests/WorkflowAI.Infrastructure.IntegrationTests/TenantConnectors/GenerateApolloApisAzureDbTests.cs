@@ -55,7 +55,7 @@ public class GenerateApolloApisAzureDbTests : IAsyncLifetime
 
         // Find or create Apollo connector
         var existing = await _db.TenantConnectors
-            .FirstOrDefaultAsync(c => c.ConnectorName == "Apollo");
+            .FirstOrDefaultAsync(c => c.ConnectorType == "Apollo");
 
         if (existing is not null)
         {

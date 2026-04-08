@@ -40,7 +40,7 @@ public class GenerateConnectorAssetsEndToEndTests : IAsyncLifetime
         Environment.GetEnvironmentVariable("WORKFLOWAI_CONNECTION_STRING")
         ?? "Host=localhost;Port=5433;Database=workflowai_dev;Username=postgres;Password=devpassword;Ssl Mode=Disable";
 
-    private static readonly string ConnectorName =
+    private static readonly string ConnectorType =
         Environment.GetEnvironmentVariable("CONNECTOR_NAME") ?? "Apollo";
 
     private WorkflowAIDbContext _db = null!;
@@ -57,11 +57,11 @@ public class GenerateConnectorAssetsEndToEndTests : IAsyncLifetime
         _connectorRepository = new SqlTenantConnectorRepository(_db);
 
         // Build a connector in Active state — ready for asset generation
-        _connector = TenantConnector.Create(TenantId.New(), ConnectorName);
+        _connector = TenantConnector.Create(TenantId.New(), ConnectorType);
         // Use minimal stub metadata so the test works for any connector name
         _connector.SetMetadata(
             """{"authType":"APIKey","requiredFields":["api_key"],"endpoints":{},"configSchema":{},"baseUrl":"https://api.example.com","testEndpoint":{"method":"GET","path":"/"}}""",
-            $$$"""{"description":"{{{ConnectorName}}} integration","docsUrl":"https://example.com","capabilities":[],"rateLimits":"unknown","webhookSupport":false}""");
+            $$$"""{"description":"{{{ConnectorType}}} integration","docsUrl":"https://example.com","capabilities":[],"rateLimits":"unknown","webhookSupport":false}""");
         _connector.Activate();
 
         IChatClient chatClient = new AnthropicClient(
@@ -77,8 +77,10 @@ public class GenerateConnectorAssetsEndToEndTests : IAsyncLifetime
         var currentUser = Substitute.For<ICurrentUserService>();
         currentUser.IsAuthenticated.Returns(true);
 
+        var options = Options.Create(new ConnectorAssetGenerationOptions());
+
         _handler = new GenerateConnectorAssetsCommandHandler(
-            _connectorRepository, claudeService, currentUser,
+            _connectorRepository, claudeService, currentUser, options,
             NullLogger<GenerateConnectorAssetsCommandHandler>.Instance);
 
         return Task.CompletedTask;
@@ -99,7 +101,7 @@ public class GenerateConnectorAssetsEndToEndTests : IAsyncLifetime
             new GenerateConnectorAssetsCommand(_connector.Id.Value), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue(
-            $"Claude should generate assets for '{ConnectorName}'");
+            $"Claude should generate assets for '{ConnectorType}'");
 
         var savedApis = await _db.TenantConnectorApis
             .Where(a => a.TenantConnectorId == _connector.Id)

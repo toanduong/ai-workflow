@@ -3,7 +3,7 @@ namespace WorkflowAI.Application.TenantConnectors.Queries;
 public sealed record TenantConnectorDto(
     Guid Id,
     Guid TenantId,
-    string ConnectorName,
+    string ConnectorType,
     string Metadata,
     string Info,
     string Status,
@@ -15,7 +15,7 @@ public sealed record TenantConnectorDto(
 public sealed record TenantConnectorApiDto(
     Guid Id,
     Guid TenantConnectorId,
-    string ConnectorName,
+    string ConnectorType,
     string ApiName,
     string HttpMethod,
     string UrlTemplate,

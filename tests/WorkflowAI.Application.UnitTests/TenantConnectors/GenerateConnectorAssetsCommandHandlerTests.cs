@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using WorkflowAI.Application.Common.Interfaces;
 using WorkflowAI.Application.TenantConnectors.Commands.GenerateConnectorAssets;
@@ -31,13 +32,14 @@ public class GenerateConnectorAssetsCommandHandlerTests
         new(_repository,
             _claudeAIService,
             _currentUserService,
+            Options.Create(new ConnectorAssetGenerationOptions()),
             NullLogger<GenerateConnectorAssetsCommandHandler>.Instance);
 
     [Fact]
     public async Task Handle_ActiveConnector_SavesApiOperationsToTenantConnectorApis()
     {
         var connector = new TenantConnectorBuilder()
-            .WithConnectorName("Apollo")
+            .WithConnectorType("Apollo")
             .Activated()
             .Build();
 
@@ -71,7 +73,7 @@ public class GenerateConnectorAssetsCommandHandlerTests
     public async Task Handle_ActiveConnector_DoesNotSaveWorkflowTemplates()
     {
         var connector = new TenantConnectorBuilder()
-            .WithConnectorName("Apollo")
+            .WithConnectorType("Apollo")
             .Activated()
             .Build();
 
@@ -103,7 +105,7 @@ public class GenerateConnectorAssetsCommandHandlerTests
     public async Task Handle_ApisAlreadyExist_SkipsClaudeAndReturnsExisting()
     {
         var connector = new TenantConnectorBuilder()
-            .WithConnectorName("Apollo")
+            .WithConnectorType("Apollo")
             .Activated()
             .Build();
 
@@ -130,7 +132,7 @@ public class GenerateConnectorAssetsCommandHandlerTests
     [Fact]
     public async Task Handle_PendingConnector_ReturnsValidationError()
     {
-        var connector = new TenantConnectorBuilder().WithConnectorName("Apollo").Build();
+        var connector = new TenantConnectorBuilder().WithConnectorType("Apollo").Build();
 
         _repository.GetByIdAsync(connector.Id, Arg.Any<CancellationToken>())
             .Returns(connector);
@@ -161,7 +163,7 @@ public class GenerateConnectorAssetsCommandHandlerTests
     [Fact]
     public async Task Handle_ClaudeFails_ReturnsFailureError()
     {
-        var connector = new TenantConnectorBuilder().WithConnectorName("Apollo").Activated().Build();
+        var connector = new TenantConnectorBuilder().WithConnectorType("Apollo").Activated().Build();
 
         _repository.GetByIdAsync(connector.Id, Arg.Any<CancellationToken>())
             .Returns(connector);

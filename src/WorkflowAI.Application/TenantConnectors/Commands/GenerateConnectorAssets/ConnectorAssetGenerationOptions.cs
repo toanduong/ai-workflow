@@ -9,11 +9,11 @@ public sealed class ConnectorAssetGenerationOptions
 
     /// <summary>
     /// The prompt template for Claude to discover API operations.
-    /// Placeholders: {ConnectorName}, {Metadata}, {Info}
+    /// Placeholders: {ConnectorType}, {Metadata}, {Info}
     /// </summary>
     public string PromptTemplate { get; set; } = """
         You are an API discovery agent for a workflow automation platform.
-        Based on the following connector metadata and info for "{ConnectorName}",
+        Based on the following connector metadata and info for "{ConnectorType}",
         enumerate all API operations this connector supports.
 
         METADATA:

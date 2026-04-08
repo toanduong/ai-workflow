@@ -50,8 +50,8 @@ public sealed class GenerateConnectorAssetsCommandHandler(
                 "[]");
         }
 
-        logger.LogInformation("Generating connector assets for {ConnectorId} ({ConnectorName})",
-            request.TenantConnectorId, connector.ConnectorName);
+        logger.LogInformation("Generating connector assets for {ConnectorId} ({ConnectorType})",
+            request.TenantConnectorId, connector.ConnectorType);
 
         var tools = new[]
         {
@@ -62,7 +62,7 @@ public sealed class GenerateConnectorAssetsCommandHandler(
         };
 
         var prompt = options.Value.PromptTemplate
-            .Replace("{ConnectorName}", connector.ConnectorName)
+            .Replace("{ConnectorType}", connector.ConnectorType)
             .Replace("{Metadata}", connector.Metadata)
             .Replace("{Info}", connector.Info);
 
@@ -174,7 +174,7 @@ public sealed class GenerateConnectorAssetsCommandHandler(
                 apis.Add(TenantConnectorApi.Create(
                     connector.Id,
                     connector.TenantId,
-                    connector.ConnectorName,
+                    connector.ConnectorType,
                     apiName: $"{method} {path}",
                     httpMethod: method,
                     urlTemplate: urlTemplate,

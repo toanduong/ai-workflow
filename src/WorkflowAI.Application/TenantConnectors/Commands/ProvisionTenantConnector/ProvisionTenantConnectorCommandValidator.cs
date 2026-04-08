@@ -7,6 +7,6 @@ public sealed class ProvisionTenantConnectorCommandValidator : AbstractValidator
     public ProvisionTenantConnectorCommandValidator()
     {
         RuleFor(x => x.TenantId).NotEmpty();
-        RuleFor(x => x.ConnectorName).NotEmpty().MaximumLength(200);
+        RuleFor(x => x.ConnectorType).NotEmpty().MaximumLength(200);
     }
 }

@@ -121,7 +121,7 @@ public class ProvisionApolloAzureDbTests
         result.IsSuccess.Should().BeTrue(
             $"Claude should generate metadata for Apollo. Error: {result.Error?.Message}");
 
-        result.Value!.ConnectorName.Should().Be("Apollo");
+        result.Value!.ConnectorType.Should().Be("Apollo");
         result.Value.Metadata.Should().NotBeNullOrWhiteSpace();
         result.Value.Info.Should().NotBeNullOrWhiteSpace();
     }
@@ -178,7 +178,7 @@ public class ProvisionApolloAzureDbTests
             .FirstOrDefaultAsync(c => c.Id == connectorId);
 
         saved.Should().NotBeNull("row must exist in Azure Postgres after provisioning");
-        saved!.ConnectorName.Should().Be("Apollo");
+        saved!.ConnectorType.Should().Be("Apollo");
         saved.TenantId.Value.Should().Be(tenantId);
         saved.Status.Should().Be(TenantConnectorStatus.Pending);
         saved.Metadata.Should().NotBeNullOrWhiteSpace();

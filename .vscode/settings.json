@@ -1,0 +1,11 @@
+{
+  "dotnet.testExplorer.runSettings": ".runsettings",
+  "terminal.integrated.env.windows": {
+    "APOLLO_API_KEY": "GTUoi0OoUJfKVnRXJNIJGg",
+    "PGHOST": "workflowai.postgres.database.azure.com",
+    "PGUSER": "postgres",
+    "PGPASSWORD": "Gotik$$789",
+    "PGPORT": "5432",
+    "PGDATABASE": "postgres"
+  }
+}

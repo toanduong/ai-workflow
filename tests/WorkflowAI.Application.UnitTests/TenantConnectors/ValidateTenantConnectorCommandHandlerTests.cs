@@ -39,7 +39,7 @@ public class ValidateTenantConnectorCommandHandlerTests
     public async Task Handle_ValidApolloApiKey_ActivatesConnector()
     {
         var connector = new TenantConnectorBuilder()
-            .WithConnectorName("Apollo")
+            .WithConnectorType("Apollo")
             .Build();
 
         _repository.GetByIdAsync(connector.Id, Arg.Any<CancellationToken>())
@@ -65,7 +65,7 @@ public class ValidateTenantConnectorCommandHandlerTests
     public async Task Handle_InvalidApiKey_MarksConnectorFailed()
     {
         var connector = new TenantConnectorBuilder()
-            .WithConnectorName("Apollo")
+            .WithConnectorType("Apollo")
             .Build();
 
         _repository.GetByIdAsync(connector.Id, Arg.Any<CancellationToken>())
@@ -90,7 +90,7 @@ public class ValidateTenantConnectorCommandHandlerTests
     public async Task Handle_BearerAuth_AppliesAuthorizationHeader()
     {
         var connector = new TenantConnectorBuilder()
-            .WithConnectorName("Salesforce")
+            .WithConnectorType("Salesforce")
             .WithMetadata(
                 """{"authType":"Bearer","requiredFields":["token"],"testEndpoint":{"method":"GET","path":"https://salesforce.example.com/services/data/v57.0"}}""",
                 """{"description":"Salesforce CRM","docsUrl":"","capabilities":[],"rateLimits":"","webhookSupport":false}""")
@@ -119,7 +119,7 @@ public class ValidateTenantConnectorCommandHandlerTests
     public async Task Handle_BasicAuth_AppliesBase64Credentials()
     {
         var connector = new TenantConnectorBuilder()
-            .WithConnectorName("Jira")
+            .WithConnectorType("Jira")
             .WithMetadata(
                 """{"authType":"Basic","requiredFields":["username","password"],"testEndpoint":{"method":"GET","path":"https://jira.example.com/rest/api/2/myself"}}""",
                 """{"description":"Jira project management","docsUrl":"","capabilities":[],"rateLimits":"","webhookSupport":false}""")
@@ -168,7 +168,7 @@ public class ValidateTenantConnectorCommandHandlerTests
     public async Task Handle_MetadataHasNoTestEndpoint_MarksConnectorFailed()
     {
         var connector = new TenantConnectorBuilder()
-            .WithConnectorName("Apollo")
+            .WithConnectorType("Apollo")
             .WithMetadata(
                 """{"authType":"APIKey","requiredFields":["api_key"],"endpoints":{}}""",
                 """{"description":"Apollo","docsUrl":"","capabilities":[],"rateLimits":"","webhookSupport":false}""")
@@ -194,7 +194,7 @@ public class ValidateTenantConnectorCommandHandlerTests
     public async Task Handle_NetworkFailure_MarksConnectorFailed()
     {
         var connector = new TenantConnectorBuilder()
-            .WithConnectorName("Apollo")
+            .WithConnectorType("Apollo")
             .Build();
 
         _repository.GetByIdAsync(connector.Id, Arg.Any<CancellationToken>())

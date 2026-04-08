@@ -43,7 +43,7 @@ public class ProvisionConnectorEndToEndTests : IAsyncLifetime
         ?? "Host=localhost;Port=5433;Database=workflowai_dev;Username=postgres;Password=devpassword;Ssl Mode=Disable";
 
     // The connector under test — override with CONNECTOR_NAME=Salesforce etc.
-    private static readonly string ConnectorName =
+    private static readonly string ConnectorType =
         Environment.GetEnvironmentVariable("CONNECTOR_NAME") ?? "Apollo";
 
     private WorkflowAIDbContext _db = null!;
@@ -92,12 +92,12 @@ public class ProvisionConnectorEndToEndTests : IAsyncLifetime
     public async Task Provision_ReturnsSuccessWithMetadataAndInfo()
     {
         var tenantId = Guid.NewGuid();
-        var command = new ProvisionTenantConnectorCommand(tenantId, ConnectorName);
+        var command = new ProvisionTenantConnectorCommand(tenantId, ConnectorType);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue(
-            $"Claude should generate valid metadata for '{ConnectorName}'");
+            $"Claude should generate valid metadata for '{ConnectorType}'");
 
         _createdIds.Add(TenantConnectorId.From(result.Value!.TenantConnectorId));
 
@@ -117,7 +117,7 @@ public class ProvisionConnectorEndToEndTests : IAsyncLifetime
     public async Task Provision_MetadataContainsRequiredAuthFields()
     {
         var tenantId = Guid.NewGuid();
-        var command = new ProvisionTenantConnectorCommand(tenantId, ConnectorName);
+        var command = new ProvisionTenantConnectorCommand(tenantId, ConnectorType);
 
         var result = await _handler.Handle(command, CancellationToken.None);
         result.IsSuccess.Should().BeTrue();
@@ -144,7 +144,7 @@ public class ProvisionConnectorEndToEndTests : IAsyncLifetime
     public async Task Provision_SavesRowToDatabase()
     {
         var tenantId = Guid.NewGuid();
-        var command = new ProvisionTenantConnectorCommand(tenantId, ConnectorName);
+        var command = new ProvisionTenantConnectorCommand(tenantId, ConnectorType);
 
         var result = await _handler.Handle(command, CancellationToken.None);
         result.IsSuccess.Should().BeTrue();
@@ -156,7 +156,7 @@ public class ProvisionConnectorEndToEndTests : IAsyncLifetime
         var saved = await _repository.GetByIdAsync(connectorId);
 
         saved.Should().NotBeNull("the row must exist in the database after provisioning");
-        saved!.ConnectorName.Should().Be(ConnectorName);
+        saved!.ConnectorType.Should().Be(ConnectorType);
         saved.TenantId.Value.Should().Be(tenantId);
         saved.Status.Should().Be(TenantConnectorStatus.Pending,
             "connector starts as Pending until credentials are validated");
@@ -168,7 +168,7 @@ public class ProvisionConnectorEndToEndTests : IAsyncLifetime
     public async Task Provision_PersistedMetadataMatchesClaudeOutput()
     {
         var tenantId = Guid.NewGuid();
-        var command = new ProvisionTenantConnectorCommand(tenantId, ConnectorName);
+        var command = new ProvisionTenantConnectorCommand(tenantId, ConnectorType);
 
         var result = await _handler.Handle(command, CancellationToken.None);
         result.IsSuccess.Should().BeTrue();
@@ -194,10 +194,10 @@ public class ProvisionConnectorEndToEndTests : IAsyncLifetime
     // ── Test 5: duplicate connector name for the same tenant is rejected ──────
 
     [Fact]
-    public async Task Provision_DuplicateConnectorName_ReturnsConflictError()
+    public async Task Provision_DuplicateConnectorType_ReturnsConflictError()
     {
         var tenantId = Guid.NewGuid();
-        var command = new ProvisionTenantConnectorCommand(tenantId, ConnectorName);
+        var command = new ProvisionTenantConnectorCommand(tenantId, ConnectorType);
 
         var first = await _handler.Handle(command, CancellationToken.None);
         first.IsSuccess.Should().BeTrue();

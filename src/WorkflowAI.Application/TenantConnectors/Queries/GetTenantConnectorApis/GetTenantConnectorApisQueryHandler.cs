@@ -16,7 +16,7 @@ public sealed class GetTenantConnectorApisQueryHandler(ITenantConnectorRepositor
         var dtos = apis.Select(a => new TenantConnectorApiDto(
             a.Id.Value,
             a.TenantConnectorId.Value,
-            a.ConnectorName,
+            a.ConnectorType,
             a.ApiName,
             a.HttpMethod,
             a.UrlTemplate,

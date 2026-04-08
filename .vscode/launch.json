@@ -1,0 +1,28 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": ".NET Test (with env vars)",
+      "type": "coreclr",
+      "request": "launch",
+      "program": "${workspaceFolder}",
+      "args": [
+        "test",
+        "tests/WorkflowAI.Infrastructure.IntegrationTests",
+        "--settings",
+        ".runsettings"
+      ],
+      "cwd": "${workspaceFolder}",
+      "stopAtEntry": false,
+      "console": "integratedTerminal",
+      "env": {
+        "APOLLO_API_KEY": "GTUoi0OoUJfKVnRXJNIJGg",
+        "PGHOST": "workflowai.postgres.database.azure.com",
+        "PGUSER": "postgres",
+        "PGPASSWORD": "Gotik$$789",
+        "PGPORT": "5432",
+        "PGDATABASE": "postgres"
+      }
+    }
+  ]
+}

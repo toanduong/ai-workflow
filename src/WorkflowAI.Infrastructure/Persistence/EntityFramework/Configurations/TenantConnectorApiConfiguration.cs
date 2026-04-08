@@ -22,7 +22,7 @@ public sealed class TenantConnectorApiConfiguration : IEntityTypeConfiguration<T
             .HasConversion(id => id.Value, v => TenantId.From(v))
             .IsRequired();
 
-        builder.Property(e => e.ConnectorName)
+        builder.Property(e => e.ConnectorType)
             .HasMaxLength(200)
             .IsRequired();
 

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RunSettings>
+  <RunConfiguration>
+    <EnvironmentVariables>
+      <APOLLO_API_KEY>GTUoi0OoUJfKVnRXJNIJGg</APOLLO_API_KEY>
+      <PGHOST>workflowai.postgres.database.azure.com</PGHOST>
+      <PGUSER>postgres</PGUSER>
+      <PGPASSWORD>Gotik$$789</PGPASSWORD>
+      <PGPORT>5432</PGPORT>
+      <PGDATABASE>postgres</PGDATABASE>
+    </EnvironmentVariables>
+  </RunConfiguration>
+</RunSettings>

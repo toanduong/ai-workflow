@@ -31,7 +31,7 @@ public class DeleteTenantConnectorCommandHandlerTests
     [Fact]
     public async Task Handle_ShouldDeleteApisBeforeConnector()
     {
-        var connector = new TenantConnectorBuilder().WithConnectorName("Apollo").Activated().Build();
+        var connector = new TenantConnectorBuilder().WithConnectorType("Apollo").Activated().Build();
         _repository.GetByIdAsync(Arg.Any<TenantConnectorId>(), Arg.Any<CancellationToken>())
             .Returns(connector);
 
@@ -52,7 +52,7 @@ public class DeleteTenantConnectorCommandHandlerTests
     [Fact]
     public async Task Handle_ShouldDeletePendingConnector_NotJustActive()
     {
-        var connector = new TenantConnectorBuilder().WithConnectorName("HubSpot").Build(); // Pending
+        var connector = new TenantConnectorBuilder().WithConnectorType("HubSpot").Build(); // Pending
         _repository.GetByIdAsync(Arg.Any<TenantConnectorId>(), Arg.Any<CancellationToken>())
             .Returns(connector);
 

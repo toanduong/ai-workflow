@@ -76,13 +76,13 @@ public class ProvisionTenantConnectorCommandHandlerTests
         var result = await CreateHandler().Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value!.ConnectorName.Should().Be("Apollo");
+        result.Value!.ConnectorType.Should().Be("Apollo");
         result.Value.Metadata.Should().Contain("APIKey");
         result.Value.Metadata.Should().Contain("testEndpoint");
         result.Value.Info.Should().Contain("docs.example.com");
         await _repository.Received(1).AddAsync(
             Arg.Is<TenantConnector>(c =>
-                c.ConnectorName == "Apollo" &&
+                c.ConnectorType == "Apollo" &&
                 c.Status == TenantConnectorStatus.Pending),
             Arg.Any<CancellationToken>());
     }
@@ -108,7 +108,7 @@ public class ProvisionTenantConnectorCommandHandlerTests
     public async Task Handle_ShouldReturnConflict_WhenConnectorAlreadyExists()
     {
         var tenantId = Guid.NewGuid();
-        var existing = new TenantConnectorBuilder().WithConnectorName("Apollo").Build();
+        var existing = new TenantConnectorBuilder().WithConnectorType("Apollo").Build();
         _repository.GetByTenantAndNameAsync(Arg.Any<TenantId>(), "Apollo", Arg.Any<CancellationToken>())
             .Returns(existing);
 
@@ -163,7 +163,7 @@ public class ProvisionTenantConnectorCommandHandlerTests
     [InlineData("Odoo")]
     [InlineData("MySQL")]
     [InlineData("GoogleSheets")]
-    public async Task Handle_ShouldWork_ForAnyConnectorName_WithoutCodeChanges(string connectorName)
+    public async Task Handle_ShouldWork_ForAnyConnectorType_WithoutCodeChanges(string connectorName)
     {
         _repository.GetByTenantAndNameAsync(
             Arg.Any<TenantId>(), connectorName, Arg.Any<CancellationToken>())
@@ -175,6 +175,6 @@ public class ProvisionTenantConnectorCommandHandlerTests
         var result = await CreateHandler().Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue($"connector '{connectorName}' should provision without code changes");
-        result.Value!.ConnectorName.Should().Be(connectorName);
+        result.Value!.ConnectorType.Should().Be(connectorName);
     }
 }

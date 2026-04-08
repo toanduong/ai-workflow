@@ -66,14 +66,14 @@ public sealed class ProvisionTenantConnectorCommandHandler(
         var tenantId = TenantId.From(request.TenantId);
 
         // Conflict check — one connector per tenant per name
-        var existing = await repository.GetByTenantAndNameAsync(tenantId, request.ConnectorName, ct);
+        var existing = await repository.GetByTenantAndNameAsync(tenantId, request.ConnectorType, ct);
         if (existing is not null)
             return Error.Conflict(
                 "TenantConnector.AlreadyExists",
-                $"Connector '{request.ConnectorName}' already exists for this tenant.");
+                $"Connector '{request.ConnectorType}' already exists for this tenant.");
 
         // Call Claude to generate Metadata + Info for this connector
-        var prompt = MetadataPromptTemplate.Replace("{connectorName}", request.ConnectorName);
+        var prompt = MetadataPromptTemplate.Replace("{connectorName}", request.ConnectorType);
         var aiResult = await anthropicService.CompleteAsync(prompt, cancellationToken: ct);
 
         if (!aiResult.Success)
@@ -89,14 +89,14 @@ public sealed class ProvisionTenantConnectorCommandHandler(
                 "Claude returned an unexpected response format.");
 
         // Create and persist
-        var connector = TenantConnector.Create(tenantId, request.ConnectorName);
+        var connector = TenantConnector.Create(tenantId, request.ConnectorType);
         connector.SetMetadata(metadata, info);
 
         await repository.AddAsync(connector, ct);
 
         return new ProvisionTenantConnectorResult(
             connector.Id.Value,
-            connector.ConnectorName,
+            connector.ConnectorType,
             connector.Metadata,
             connector.Info);
     }

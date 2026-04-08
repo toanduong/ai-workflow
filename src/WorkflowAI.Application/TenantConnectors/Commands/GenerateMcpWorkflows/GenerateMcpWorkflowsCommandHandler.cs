@@ -100,7 +100,7 @@ public sealed class GenerateMcpWorkflowsCommandHandler(
             : "(No API operations discovered yet — generate generic workflow templates based on the connector type.)";
 
         var prompt = WorkflowGenerationPromptTemplate
-            .Replace("{connectorName}", connector.ConnectorName)
+            .Replace("{connectorName}", connector.ConnectorType)
             .Replace("{apiOperations}", apiSummary);
 
         var aiResult = await anthropicService.CompleteWithToolsAsync(
@@ -109,7 +109,7 @@ public sealed class GenerateMcpWorkflowsCommandHandler(
         if (!aiResult.Success)
         {
             logger.LogWarning("Claude workflow generation failed for {Connector}: {Error}",
-                connector.ConnectorName, aiResult.ErrorMessage);
+                connector.ConnectorType, aiResult.ErrorMessage);
             return Error.Unexpected(
                 "TenantConnector.GenerationFailed",
                 $"Claude failed to generate workflows: {aiResult.ErrorMessage}");
@@ -123,7 +123,7 @@ public sealed class GenerateMcpWorkflowsCommandHandler(
         var workflowDefsJson = JsonSerializer.Serialize(workflowDefs);
 
         return new GenerateMcpWorkflowsResult(
-            ConnectorName: connector.ConnectorName,
+            ConnectorType: connector.ConnectorType,
             ApiRoutesCount: apiRoutes.Count,
             WorkflowTemplatesCount: workflowDefs.Count,
             ApiRoutes: apiRoutesJson,

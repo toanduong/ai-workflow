@@ -23,10 +23,10 @@ public sealed class ProvisionTenantConnectorFunction(IMediator mediator)
             return badRequest;
         }
 
-        var command = new ProvisionTenantConnectorCommand(tenantId, body.ConnectorName);
+        var command = new ProvisionTenantConnectorCommand(tenantId, body.ConnectorType);
         var result = await mediator.Send(command);
         return await req.CreateResultResponseAsync(result, HttpStatusCode.Created);
     }
 }
 
-public sealed record ProvisionTenantConnectorRequest(string ConnectorName);
+public sealed record ProvisionTenantConnectorRequest(string ConnectorType);

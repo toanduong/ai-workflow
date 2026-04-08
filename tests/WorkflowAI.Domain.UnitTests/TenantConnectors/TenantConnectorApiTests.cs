@@ -25,7 +25,7 @@ public class TenantConnectorApiTests
         api.Id.Value.Should().NotBeEmpty();
         api.TenantConnectorId.Should().Be(ConnectorId);
         api.TenantId.Should().Be(TenantId);
-        api.ConnectorName.Should().Be("Odoo");
+        api.ConnectorType.Should().Be("Odoo");
         api.ApiName.Should().Be("res.partner/list");
         api.HttpMethod.Should().Be("GET");  // normalised to upper
         api.UrlTemplate.Should().Be("https://{odoo_instance}/api/res.partner");

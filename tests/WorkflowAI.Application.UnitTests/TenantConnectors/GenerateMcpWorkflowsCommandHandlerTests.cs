@@ -42,7 +42,7 @@ public class GenerateMcpWorkflowsCommandHandlerTests
     [Fact]
     public async Task Handle_ShouldReturnValidation_WhenConnectorIsNotActive()
     {
-        var pendingConnector = new TenantConnectorBuilder().WithConnectorName("Stripe").Build();
+        var pendingConnector = new TenantConnectorBuilder().WithConnectorType("Stripe").Build();
         _repository.GetByIdAsync(Arg.Any<TenantConnectorId>(), Arg.Any<CancellationToken>())
             .Returns(pendingConnector);
 
@@ -60,7 +60,7 @@ public class GenerateMcpWorkflowsCommandHandlerTests
     public async Task Handle_ShouldGenerateRoutesAndTemplates_WhenConnectorIsActive()
     {
         var connector = new TenantConnectorBuilder()
-            .WithConnectorName("Apollo")
+            .WithConnectorType("Apollo")
             .Activated()
             .Build();
         _repository.GetByIdAsync(Arg.Any<TenantConnectorId>(), Arg.Any<CancellationToken>())
@@ -76,7 +76,7 @@ public class GenerateMcpWorkflowsCommandHandlerTests
             new GenerateMcpWorkflowsCommand(connector.Id.Value), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value!.ConnectorName.Should().Be("Apollo");
+        result.Value!.ConnectorType.Should().Be("Apollo");
         result.Value.ApiRoutesCount.Should().Be(2);
         result.Value.WorkflowTemplatesCount.Should().Be(1);
         result.Value.ApiRoutes.Should().Contain("contacts-search");
@@ -87,7 +87,7 @@ public class GenerateMcpWorkflowsCommandHandlerTests
     public async Task Handle_ShouldIncludeDiscoveredApisInPrompt_WhenApisExist()
     {
         var connector = new TenantConnectorBuilder()
-            .WithConnectorName("HubSpot")
+            .WithConnectorType("HubSpot")
             .Activated()
             .Build();
         var api = TenantConnectorApi.Create(
@@ -116,7 +116,7 @@ public class GenerateMcpWorkflowsCommandHandlerTests
     [Fact]
     public async Task Handle_ShouldReturnFailure_WhenClaudeFails()
     {
-        var connector = new TenantConnectorBuilder().WithConnectorName("Salesforce").Activated().Build();
+        var connector = new TenantConnectorBuilder().WithConnectorType("Salesforce").Activated().Build();
         _repository.GetByIdAsync(Arg.Any<TenantConnectorId>(), Arg.Any<CancellationToken>())
             .Returns(connector);
         _repository.GetApisByConnectorAsync(Arg.Any<TenantConnectorId>(), Arg.Any<CancellationToken>())
@@ -141,7 +141,7 @@ public class GenerateMcpWorkflowsCommandHandlerTests
     [InlineData("Shopify")]
     public async Task Handle_ShouldWork_ForAnyActiveConnector_WithoutCodeChanges(string connectorName)
     {
-        var connector = new TenantConnectorBuilder().WithConnectorName(connectorName).Activated().Build();
+        var connector = new TenantConnectorBuilder().WithConnectorType(connectorName).Activated().Build();
         _repository.GetByIdAsync(Arg.Any<TenantConnectorId>(), Arg.Any<CancellationToken>())
             .Returns(connector);
         _repository.GetApisByConnectorAsync(Arg.Any<TenantConnectorId>(), Arg.Any<CancellationToken>())
@@ -155,6 +155,6 @@ public class GenerateMcpWorkflowsCommandHandlerTests
             new GenerateMcpWorkflowsCommand(connector.Id.Value), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue($"'{connectorName}' should generate workflows without code changes");
-        result.Value!.ConnectorName.Should().Be(connectorName);
+        result.Value!.ConnectorType.Should().Be(connectorName);
     }
 }

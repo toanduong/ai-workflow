@@ -16,7 +16,7 @@ public class TenantConnectorTests
 
         connector.Id.Value.Should().NotBeEmpty();
         connector.TenantId.Should().Be(tenantId);
-        connector.ConnectorName.Should().Be("Odoo");
+        connector.ConnectorType.Should().Be("Odoo");
         connector.Status.Should().Be(TenantConnectorStatus.Pending);
         connector.Metadata.Should().BeEmpty();
         connector.Info.Should().BeEmpty();
