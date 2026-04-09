@@ -27,6 +27,12 @@ public sealed class TenantConnector : AggregateRoot<TenantConnectorId>
     /// </summary>
     public string? CredentialSecretNames { get; private set; }
 
+    /// <summary>
+    /// The AI model used to provision and generate assets for this connector
+    /// (e.g. "claude-sonnet-4-6"). Stored for auditability and reproducibility.
+    /// </summary>
+    public string? AIModelType { get; private set; }
+
     private TenantConnector() { }
 
     public static TenantConnector Create(TenantId tenantId, string connectorType)
@@ -41,6 +47,12 @@ public sealed class TenantConnector : AggregateRoot<TenantConnectorId>
         };
         connector.RaiseDomainEvent(new TenantConnectorProvisionedEvent(connector.Id, tenantId, connectorType));
         return connector;
+    }
+
+    public void SetAIModelType(string? aiModelType)
+    {
+        AIModelType = aiModelType;
+        UpdatedAt = DateTime.UtcNow;
     }
 
     public void SetMetadata(string metadata, string info)
