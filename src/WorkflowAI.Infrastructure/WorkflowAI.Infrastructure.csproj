@@ -24,6 +24,7 @@
     <PackageReference Include="Microsoft.Extensions.Options" />
     <PackageReference Include="Anthropic.SDK" />
     <PackageReference Include="Microsoft.Extensions.AI" />
+    <PackageReference Include="EPPlus" />
   </ItemGroup>
 
   <ItemGroup>
