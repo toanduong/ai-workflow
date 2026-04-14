@@ -22,7 +22,8 @@ public sealed class TenantConnectorApiConfiguration : IEntityTypeConfiguration<T
             .HasConversion(id => id.Value, v => TenantId.From(v))
             .IsRequired();
 
-        builder.Property(e => e.ConnectorType)
+        builder.Property(e => e.ConnectorName)
+            .HasColumnName("ConnectorType")
             .HasMaxLength(200)
             .IsRequired();
 
@@ -40,10 +41,6 @@ public sealed class TenantConnectorApiConfiguration : IEntityTypeConfiguration<T
 
         builder.Property(e => e.Metadata)
             .HasColumnType("text")
-            .IsRequired();
-
-        builder.Property(e => e.Version)
-            .HasDefaultValue(1)
             .IsRequired();
 
         // Index for fast lookup by connector

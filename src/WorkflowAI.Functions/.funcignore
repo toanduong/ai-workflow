@@ -1,0 +1,13 @@
+*.suo
+*.user
+.vscode
+.vs  
+bin
+obj
+*.cache
+*.dll
+*.exe
+*.log
+*.pdb
+node_modules
+generated

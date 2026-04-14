@@ -10,6 +10,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using OpenAI;
 using WorkflowAI.Application.Common.Interfaces;
 using WorkflowAI.Domain.AIAgent;
 using WorkflowAI.Domain.Approvals;
@@ -72,12 +73,37 @@ public static class DependencyInjection
         services.Configure<AzureOpenAIOptions>(configuration.GetSection(AzureOpenAIOptions.SectionName));
         services.AddScoped<IAzureOpenAIService, AzureOpenAIService>();
 
-        // Anthropic Claude
+        // AI Provider — switchable via Ai__Provider config ("Anthropic" | "GitHubModels")
+        services.Configure<AiProviderOptions>(configuration.GetSection(AiProviderOptions.SectionName));
         services.Configure<AnthropicOptions>(configuration.GetSection(AnthropicOptions.SectionName));
+        services.Configure<GitHubModelsOptions>(configuration.GetSection(GitHubModelsOptions.SectionName));
+
+        // When using GitHub Models, override AnthropicOptions.DefaultModel so AnthropicService
+        // sends the correct model name in ChatOptions.ModelId (e.g. "gpt-4o" not "claude-sonnet-4-5")
+        var aiProvider = configuration[$"{AiProviderOptions.SectionName}:Provider"] ?? "Anthropic";
+        if (string.Equals(aiProvider, "GitHubModels", StringComparison.OrdinalIgnoreCase))
+        {
+            var githubModel = configuration[$"{GitHubModelsOptions.SectionName}:DefaultModel"] ?? "gpt-4o";
+            services.PostConfigure<AnthropicOptions>(opts => opts.DefaultModel = githubModel);
+        }
+
         services.AddSingleton<IChatClient>(sp =>
         {
-            var opts = sp.GetRequiredService<IOptions<AnthropicOptions>>().Value;
-            return new AnthropicClient(apiKeys: new APIAuthentication(opts.ApiKey)).Messages;
+            var providerOpts = sp.GetRequiredService<IOptions<AiProviderOptions>>().Value;
+            var anthropicOpts = sp.GetRequiredService<IOptions<AnthropicOptions>>().Value;
+
+            if (string.Equals(providerOpts.Provider, "GitHubModels", StringComparison.OrdinalIgnoreCase))
+            {
+                var githubOpts = sp.GetRequiredService<IOptions<GitHubModelsOptions>>().Value;
+                return new OpenAIClient(
+                    new System.ClientModel.ApiKeyCredential(githubOpts.Token),
+                    new OpenAIClientOptions { Endpoint = new Uri(githubOpts.Endpoint) })
+                    .GetChatClient(githubOpts.DefaultModel)
+                    .AsIChatClient();
+            }
+
+            // Default: Anthropic SDK
+            return new AnthropicClient(apiKeys: new APIAuthentication(anthropicOpts.ApiKey)).Messages;
         });
         services.AddScoped<IAnthropicService, AnthropicService>();
 

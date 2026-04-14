@@ -18,8 +18,7 @@ public sealed class TenantConnectorConfiguration : IEntityTypeConfiguration<Tena
             .HasConversion(id => id.Value, value => TenantId.From(value))
             .IsRequired();
 
-        builder.Property(e => e.ConnectorType).HasMaxLength(200).IsRequired();
-        builder.Property(e => e.Version).HasDefaultValue(1).IsRequired();
+        builder.Property(e => e.ConnectorName).HasColumnName("ConnectorType").HasMaxLength(200).IsRequired();
 
         builder.Property(e => e.Metadata).HasColumnType("text").IsRequired();
         builder.Property(e => e.Info).HasColumnType("text").IsRequired();
@@ -33,6 +32,6 @@ public sealed class TenantConnectorConfiguration : IEntityTypeConfiguration<Tena
         builder.Property(e => e.AIModelType).HasMaxLength(100);
 
         builder.HasIndex(e => e.TenantId);
-        builder.HasIndex(e => new { e.TenantId, e.ConnectorType }).IsUnique();
+        builder.HasIndex(e => new { e.TenantId, e.ConnectorName }).IsUnique();
     }
 }
