@@ -71,3 +71,9 @@ docs/
 .claude/
 note.txt
 note.txt
+
+## Local workflow storage
+luu-file-workflow/
+
+## Migration scripts
+scripts/

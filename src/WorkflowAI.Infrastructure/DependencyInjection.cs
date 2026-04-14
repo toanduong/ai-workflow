@@ -1,5 +1,6 @@
 using Anthropic.SDK;
 using Azure.Communication.Email;
+using Azure.Core;
 using Azure.Identity;
 using Azure.Messaging.ServiceBus;
 using Azure.ResourceManager;
@@ -23,6 +24,7 @@ using WorkflowAI.Domain.TenantConnectors;
 using WorkflowAI.Domain.Users;
 using WorkflowAI.Domain.Workflows;
 using WorkflowAI.Infrastructure.AI;
+using WorkflowAI.Infrastructure.Azure;
 using WorkflowAI.Infrastructure.Connectors.Auth;
 using WorkflowAI.Infrastructure.Connectors;
 using WorkflowAI.Infrastructure.Identity;
@@ -115,11 +117,22 @@ public static class DependencyInjection
         services.AddScoped<EmailNotificationAdapter>();
         services.AddScoped<INotificationSender, NotificationRouter>();
 
-        // Blob Storage
+        // Blob Storage - Use local file storage for development
+        services.AddScoped<IBlobStorageService, LocalFileStorageService>();
+        
+        // Still need BlobServiceClient for BlobWorkflowRepository (will be replaced later)
         services.AddSingleton(sp =>
             new BlobServiceClient(configuration.GetConnectionString("BlobStorage")));
-        services.AddScoped<IBlobStorageService, BlobStorageService>();
         services.AddScoped<IWorkflowRepository, BlobWorkflowRepository>();
+
+        // Azure Deployment Service
+        services.AddSingleton<TokenCredential>(sp =>
+        {
+            // Try Managed Identity first (for production on Azure)
+            // Falls back to Azure CLI credentials for local development
+            return new DefaultAzureCredential();
+        });
+        services.AddScoped<IAzureDeploymentService, AzureDeploymentService>();
 
         // Identity & Token
         services.AddScoped<ICurrentUserService, CurrentUserService>();

@@ -1,3 +1,4 @@
+using Azure;
 using Azure.Communication.Email;
 using Microsoft.Extensions.Logging;
 using WorkflowAI.Application.Common.Interfaces;
@@ -19,7 +20,7 @@ public sealed class EmailNotificationAdapter(
                 recipientAddress: request.RecipientAddress,
                 content: new EmailContent(request.Subject) { Html = request.Body });
 
-            await emailClient.SendAsync(Azure.WaitUntil.Started, emailMessage, cancellationToken);
+            await emailClient.SendAsync(WaitUntil.Started, emailMessage, cancellationToken);
             return true;
         }
         catch (Exception ex)

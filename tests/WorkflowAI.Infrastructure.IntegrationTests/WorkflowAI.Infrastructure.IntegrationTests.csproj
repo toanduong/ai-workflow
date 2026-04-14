@@ -14,6 +14,8 @@
     <PackageReference Include="Microsoft.Extensions.Options" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.AI.OpenAI" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.FileExtensions" />
   </ItemGroup>
 
   <ItemGroup>
@@ -30,6 +32,9 @@
     <Content Include="..\..\src\WorkflowAI.Functions\local.settings.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Link>local.settings.json</Link>
+    </Content>
+    <Content Include="Azure\SampleArmTemplate.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
 
